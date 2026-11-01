@@ -92,7 +92,7 @@
       var k, sx, sy;
       if (minorGrid) {
         var step = CELL / 10;                    // 100 m (102 m cells / 10)
-        ctx.strokeStyle = dark ? "rgba(235,240,220,0.20)" : "rgba(30,35,25,0.18)";
+        ctx.strokeStyle = dark ? "rgba(235,240,220,0.38)" : "rgba(30,35,25,0.34)";
         ctx.beginPath();
         var j0 = Math.max(0, Math.ceil(nw.lng / step));
         var j1 = Math.min(80, Math.floor((nw.lng + 256 / scale) / step));
@@ -319,7 +319,7 @@
       var gridOn = document.getElementById("grid-toggle").checked;
       var grid100On = document.getElementById("grid100-toggle").checked;
       if (grid100On) {
-        ctx.strokeStyle = "rgba(240,244,228,0.28)";
+        ctx.strokeStyle = "rgba(240,244,228,0.42)";
         ctx.lineWidth = Math.max(1, scale / 2);
         ctx.beginPath();
         for (var m = 0; m <= 80; m++) {
