@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PUBG TOPO — Topographic maps for PUBG's competitive maps</title>
+<meta name="description" content="Real topographic maps (contours, hillshade, micro-relief) for Erangel, Miramar, Taego and Rondo — built from the game's own terrain data.">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">
+    <span class="brand-mark">PUBG&nbsp;TOPO</span>
+    <span class="brand-sub">TOPOGRAPHIC SERIES · PGS / PGC MAPS</span>
+  </div>
+  <nav id="mapswitch" aria-label="Map">
+    <button data-map="erangel" class="active">ERANGEL</button>
+    <button data-map="miramar">MIRAMAR</button>
+    <button data-map="taego">TAEGO</button>
+    <button data-map="rondo">RONDO</button>
+  </nav>
+  <button id="theme-toggle" title="Toggle light / dark chrome">LIGHT&nbsp;MODE</button>
+</header>
+
+<aside id="panel">
+  <button id="panel-collapse" aria-label="Collapse panel">LAYERS</button>
+  <div id="panel-body">
+    <section>
+      <h2>BASE</h2>
+      <label class="row"><input type="radio" name="base" value="topo" checked>
+        <span>Topo sheet</span></label>
+      <label class="row"><input type="radio" name="base" value="art" id="base-art-radio">
+        <span>Map art overlay</span></label>
+      <p class="note" id="art-note">Art overlay: Erangel only.</p>
+      <label class="row slider-row">
+        <span>Art opacity</span>
+        <input type="range" id="art-opacity" min="10" max="100" value="100" disabled>
+      </label>
+    </section>
+    <section>
+      <h2>OVERLAYS</h2>
+      <label class="row"><input type="checkbox" id="fine-toggle">
+        <span>Fine detail — 2 m contours + micro-relief</span></label>
+      <label class="row"><input type="checkbox" id="grid-toggle" checked>
+        <span>1 km grid</span></label>
+      <p class="note" id="labels-note"></p>
+    </section>
+    <section>
+      <h2>EXPORT</h2>
+      <button id="export-btn">DOWNLOAD CURRENT VIEW (PNG)</button>
+      <p class="note">Stitches the visible tiles at the current zoom —
+        with fine detail and grid if they're on. For print / screenshots.</p>
+    </section>
+    <section>
+      <h2 id="map-name">ERANGEL</h2>
+      <p class="note" id="map-stats"></p>
+      <p class="note">Contours 10 m · index 50 m labelled.
+        Fine layer: tiered 2 m contours + micro-relief (±5 m) —
+        built to expose the 1–5 m bowls and dips that decide late-game fights.</p>
+    </section>
+  </div>
+</aside>
+
+<div id="map"></div>
+
+<div id="readout">—</div>
+<div id="scalebar"><div id="scalebar-line"></div><span id="scalebar-label">1 km</span></div>
+
+<footer id="footer">
+  <span>Unofficial fan project — not affiliated with KRAFTON or PUBG Studios.
+    Terrain derived from the game files; no game assets are distributed by the extraction tool.</span>
+  <a href="https://github.com/withfinesse/pubg-topographic-maps" target="_blank" rel="noopener">Build your own: pubgtopo on GitHub</a>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
