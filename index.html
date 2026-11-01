@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PUBG TOPO — Topographic maps for PUBG's competitive maps</title>
 <meta name="description" content="Real topographic maps (contours, hillshade, micro-relief) for Erangel, Miramar, Taego and Rondo — built from the game's own terrain data.">
-<link rel="stylesheet" href="assets/vendor/leaflet.css?v=4">
-<link rel="stylesheet" href="assets/style.css?v=4">
+<link rel="stylesheet" href="assets/vendor/leaflet.css?v=5">
+<link rel="stylesheet" href="assets/style.css?v=5">
 </head>
 <body>
 <header id="topbar">
@@ -45,13 +45,17 @@
         <span>Fine detail — 2 m contours + micro-relief</span></label>
       <label class="row"><input type="checkbox" id="grid-toggle" checked>
         <span>1 km grid</span></label>
+      <label class="row"><input type="checkbox" id="grid100-toggle">
+        <span>100 m grid</span></label>
+      <label class="row"><input type="checkbox" id="labels-toggle" checked>
+        <span>Place labels</span></label>
       <p class="note" id="labels-note"></p>
     </section>
     <section>
       <h2>EXPORT</h2>
       <button id="export-btn">DOWNLOAD CURRENT VIEW (PNG)</button>
       <p class="note">Stitches the visible tiles at the current zoom —
-        with fine detail and grid if they're on. For print / screenshots.</p>
+        with fine detail, grids and labels if they're on. For print / screenshots.</p>
     </section>
     <section>
       <h2 id="map-name">ERANGEL</h2>
@@ -75,7 +79,7 @@
   <a href="https://github.com/withfinesse/pubg-topographic-maps" target="_blank" rel="noopener">Build your own: pubgtopo on GitHub</a>
 </footer>
 
-<script src="assets/vendor/leaflet.js?v=4"></script>
-<script src="assets/app.js?v=4"></script>
+<script src="assets/vendor/leaflet.js?v=5"></script>
+<script src="assets/app.js?v=5"></script>
 </body>
 </html>

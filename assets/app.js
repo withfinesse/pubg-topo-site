@@ -6,7 +6,7 @@
   "use strict";
   var G = 4096, SPAN = 8.16, MAXLVL = 4, CELL = G / 8; // 512 units = 1.02 km
   var MAPS = {
-    erangel: { name: "ERANGEL", stats: "Baltic · 8×8 km · elevation −81.5 m … +248.2 m (Stalber) · 27 place labels baked in" },
+    erangel: { name: "ERANGEL", stats: "Baltic · 8×8 km · elevation −81.5 m … +248.2 m (Stalber) · 27 place labels on their own layer" },
     miramar: { name: "MIRAMAR", stats: "Desert · 8×8 km · elevation −90.4 m … +256.0 m · source data saturates at the highest plateaus" },
     taego:   { name: "TAEGO",   stats: "Tiger · 8×8 km · elevation −222.3 m … +181.1 m" },
     rondo:   { name: "RONDO",   stats: "Neon · 8×8 km · elevation −32.6 m … +244.6 m" }
@@ -30,7 +30,7 @@
     root.setAttribute("data-theme", next);
     try { localStorage.setItem("pubgtopo-theme", next); } catch (e) {}
     syncThemeBtn();
-    if (typeof grid !== "undefined") grid.redraw();
+    if (typeof refreshGrid !== "undefined") refreshGrid();
   });
   syncThemeBtn();
 
@@ -67,9 +67,17 @@
   var artLayer = L.tileLayer("tiles/erangel/art/{z}/{x}/{y}.webp",
     tileOpts({ zIndex: 2, opacity: 1 }));
   var fineLayer = makeFine(current);
+  var labelsLayer = L.tileLayer("tiles/erangel/labels/{z}/{x}/{y}.webp",
+    tileOpts({ zIndex: 6 }));
   topoLayer.addTo(map);
 
-  /* ---------- 1 km grid (canvas GridLayer) ---------- */
+  /* ---------- grids (canvas GridLayer): 1 km cells + optional 100 m
+     minor lines, as on the in-game map. Two independent toggles; the
+     flags are read at tile-creation time, and toggling re-adds the
+     layer (a fresh layer takes the rounded _setView path — calling
+     GridLayer.redraw() at a fractional zoom corrupts its tile zoom,
+     the same Leaflet 1.9 quirk as setUrl). ---------- */
+  var majorGrid = true, minorGrid = false;
   var gridLayer = L.GridLayer.extend({
     createTile: function (coords, done) {
       var tile = L.DomUtil.create("canvas", "leaflet-tile");
@@ -78,32 +86,54 @@
       var scale = Math.pow(2, coords.z);        // screen px per latlng unit
       var nw = map.unproject(L.point(coords.x * 256, coords.y * 256), coords.z);
       var dark = root.getAttribute("data-theme") !== "light";
-      ctx.strokeStyle = dark ? "rgba(235,240,220,0.5)" : "rgba(30,35,25,0.45)";
       ctx.fillStyle = dark ? "rgba(235,240,220,0.85)" : "rgba(30,35,25,0.8)";
       ctx.lineWidth = 1;
       ctx.font = "600 11px 'Segoe UI', Arial, sans-serif";
       var k, sx, sy;
-      ctx.beginPath();
-      for (k = 0; k <= 8; k++) {
-        sx = (k * CELL - nw.lng) * scale;
-        if (sx >= 0 && sx <= 256) { ctx.moveTo(sx, 0); ctx.lineTo(sx, 256); }
-        sy = (nw.lat - (-k * CELL)) * scale;
-        if (sy >= 0 && sy <= 256) { ctx.moveTo(0, sy); ctx.lineTo(256, sy); }
-      }
-      ctx.stroke();
-      // edge labels: column letters along the north edge, row numbers west
-      if (coords.y === 0) {
-        ctx.textAlign = "center";
-        for (k = 0; k < 8; k++) {
-          sx = ((k + 0.5) * CELL - nw.lng) * scale;
-          if (sx > 0 && sx < 256) ctx.fillText("ABCDEFGH"[k], sx, 14);
+      if (minorGrid) {
+        var step = CELL / 10;                    // 100 m (102 m cells / 10)
+        ctx.strokeStyle = dark ? "rgba(235,240,220,0.20)" : "rgba(30,35,25,0.18)";
+        ctx.beginPath();
+        var j0 = Math.max(0, Math.ceil(nw.lng / step));
+        var j1 = Math.min(80, Math.floor((nw.lng + 256 / scale) / step));
+        for (var j = j0; j <= j1; j++) {
+          if (j % 10 === 0 && majorGrid) continue;   // border: major pass
+          sx = (j * step - nw.lng) * scale;
+          if (sx >= 0 && sx <= 256) { ctx.moveTo(sx, 0); ctx.lineTo(sx, 256); }
         }
+        var i0 = Math.max(0, Math.ceil(-nw.lat / step));
+        var i1 = Math.min(80, Math.floor((-nw.lat + 256 / scale) / step));
+        for (var i2 = i0; i2 <= i1; i2++) {
+          if (i2 % 10 === 0 && majorGrid) continue;
+          sy = (nw.lat - (-i2 * step)) * scale;
+          if (sy >= 0 && sy <= 256) { ctx.moveTo(0, sy); ctx.lineTo(256, sy); }
+        }
+        ctx.stroke();
       }
-      if (coords.x === 0) {
-        ctx.textAlign = "left";
-        for (k = 0; k < 8; k++) {
-          sy = (nw.lat - (-(k + 0.5) * CELL)) * scale;
-          if (sy > 0 && sy < 256) ctx.fillText(String(k + 1), 5, sy + 4);
+      if (majorGrid) {
+        ctx.strokeStyle = dark ? "rgba(235,240,220,0.5)" : "rgba(30,35,25,0.45)";
+        ctx.beginPath();
+        for (k = 0; k <= 8; k++) {
+          sx = (k * CELL - nw.lng) * scale;
+          if (sx >= 0 && sx <= 256) { ctx.moveTo(sx, 0); ctx.lineTo(sx, 256); }
+          sy = (nw.lat - (-k * CELL)) * scale;
+          if (sy >= 0 && sy <= 256) { ctx.moveTo(0, sy); ctx.lineTo(256, sy); }
+        }
+        ctx.stroke();
+        // edge labels: column letters along the north edge, row numbers west
+        if (coords.y === 0) {
+          ctx.textAlign = "center";
+          for (k = 0; k < 8; k++) {
+            sx = ((k + 0.5) * CELL - nw.lng) * scale;
+            if (sx > 0 && sx < 256) ctx.fillText("ABCDEFGH"[k], sx, 14);
+          }
+        }
+        if (coords.x === 0) {
+          ctx.textAlign = "left";
+          for (k = 0; k < 8; k++) {
+            sy = (nw.lat - (-(k + 0.5) * CELL)) * scale;
+            if (sy > 0 && sy < 256) ctx.fillText(String(k + 1), 5, sy + 4);
+          }
         }
       }
       done(null, tile);
@@ -113,6 +143,13 @@
   var grid = new gridLayer({ tileSize: 256, bounds: bounds, zIndex: 4,
     minZoom: -MAXLVL, maxZoom: 0, opacity: 1, pane: "tilePane" });
   grid.addTo(map);
+  function refreshGrid() {
+    var want = majorGrid || minorGrid;
+    var on = map.hasLayer(grid);
+    if (want && on) { map.removeLayer(grid); grid.addTo(map); }
+    else if (want && !on) grid.addTo(map);
+    else if (!want && on) map.removeLayer(grid);
+  }
 
   /* ---------- readout + scale bar ---------- */
   var readout = document.getElementById("readout");
@@ -153,6 +190,7 @@
   var artOpacity = document.getElementById("art-opacity");
   var artNote = document.getElementById("art-note");
   var labelsNote = document.getElementById("labels-note");
+  var labelsToggle = document.getElementById("labels-toggle");
   var artRadio = document.getElementById("base-art-radio");
 
   function syncBase() {
@@ -170,11 +208,20 @@
       ? "Art overlay: topo drawn over the official map art. Slider crossfades it against the topo sheet."
       : "Art overlay: Erangel only (official art alignment is verified for Erangel).";
     labelsNote.textContent = current === "erangel"
-      ? "Place labels: the 27 Erangel POIs are baked into this map's sheets."
+      ? "Place labels: the 27 Erangel POIs, on their own layer above everything else."
       : "Place labels: Erangel only for now.";
     document.getElementById("map-name").textContent = MAPS[current].name;
     document.getElementById("map-stats").textContent = MAPS[current].stats;
+    syncLabels();
   }
+  function syncLabels() {
+    var want = labelsToggle.checked && current === "erangel";
+    if (want && !map.hasLayer(labelsLayer)) labelsLayer.addTo(map);
+    if (!want && map.hasLayer(labelsLayer)) map.removeLayer(labelsLayer);
+    labelsToggle.disabled = current !== "erangel";
+    labelsToggle.parentNode.classList.toggle("disabled", current !== "erangel");
+  }
+  labelsToggle.addEventListener("change", syncLabels);
   document.querySelectorAll("input[name='base']").forEach(function (r) {
     r.addEventListener("change", function () { baseMode = r.value; syncBase(); });
   });
@@ -185,7 +232,10 @@
     if (e.target.checked) fineLayer.addTo(map); else map.removeLayer(fineLayer);
   });
   document.getElementById("grid-toggle").addEventListener("change", function (e) {
-    if (e.target.checked) grid.addTo(map); else map.removeLayer(grid);
+    majorGrid = e.target.checked; refreshGrid();
+  });
+  document.getElementById("grid100-toggle").addEventListener("change", function (e) {
+    minorGrid = e.target.checked; refreshGrid();
   });
   document.getElementById("panel-collapse").addEventListener("click", function () {
     document.getElementById("panel").classList.toggle("collapsed");
@@ -266,7 +316,22 @@
         await blit("tiles/erangel/art/{z}/{x}/{y}.webp", artOpacity.value / 100);
       if (document.getElementById("fine-toggle").checked)
         await blit("tiles/" + current + "/fine/{z}/{x}/{y}.webp", 0.95);
-      if (document.getElementById("grid-toggle").checked) {
+      var gridOn = document.getElementById("grid-toggle").checked;
+      var grid100On = document.getElementById("grid100-toggle").checked;
+      if (grid100On) {
+        ctx.strokeStyle = "rgba(240,244,228,0.28)";
+        ctx.lineWidth = Math.max(1, scale / 2);
+        ctx.beginPath();
+        for (var m = 0; m <= 80; m++) {
+          if (m % 10 === 0 && gridOn) continue;   // border: major pass
+          var mx = m * (CELL / 10) * scale - x0;
+          if (mx >= 0 && mx <= w) { ctx.moveTo(mx, 0); ctx.lineTo(mx, h); }
+          var my = m * (CELL / 10) * scale - y0;
+          if (my >= 0 && my <= h) { ctx.moveTo(0, my); ctx.lineTo(w, my); }
+        }
+        ctx.stroke();
+      }
+      if (gridOn) {
         ctx.strokeStyle = "rgba(240,244,228,0.55)";
         ctx.lineWidth = Math.max(1, scale / 2);
         ctx.beginPath();
@@ -288,6 +353,8 @@
           for (var r = 0; r < 8; r++)
             ctx.fillText(String(r + 1), 8, (r + 0.5) * CELL * scale - y0 + 4);
       }
+      if (document.getElementById("labels-toggle").checked && current === "erangel")
+        await blit("tiles/erangel/labels/{z}/{x}/{y}.webp", 1);
       var ctr = fmt(map.getCenter());
       ctx.fillStyle = "rgba(8,10,8,0.72)";
       ctx.fillRect(0, h - 30, w, 30);
