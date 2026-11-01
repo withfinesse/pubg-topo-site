@@ -59,9 +59,13 @@ body {
 #mapswitch button:hover, #theme-toggle:hover { color: var(--text); border-color: var(--accent-dim); }
 #mapswitch button.active { background: var(--btn-active); color: var(--accent); border-color: var(--accent-dim); }
 #theme-toggle { margin-left: auto; color: var(--text); }
+/* ---- stage: everything below the header lives in here, so panel /
+   readout / scale bar anchor to the map area, not the viewport — the
+   header can wrap at narrow widths without overlapping them ---- */
+#stage { position: relative; flex: 1 1 auto; }
 /* ---- layer panel ---- */
 #panel {
-  position: absolute; top: 64px; left: 12px; z-index: 1100;
+  position: absolute; top: 12px; left: 12px; z-index: 1100;
   width: 248px; background: var(--panel); border: 1px solid var(--line);
   backdrop-filter: blur(3px);
 }
@@ -91,7 +95,7 @@ body {
 #export-btn:hover { border-color: var(--accent); }
 #export-btn[disabled] { opacity: 0.55; cursor: wait; }
 /* ---- map ---- */
-#map { flex: 1 1 auto; background: var(--map-bg); }
+#map { position: absolute; inset: 0; background: var(--map-bg); }
 .leaflet-container { background: var(--map-bg); font: inherit; }
 .leaflet-bar a {
   background: var(--bg2); color: var(--text); border-color: var(--line);
@@ -104,7 +108,7 @@ body {
 .leaflet-control-attribution a { color: #9aa48d !important; }
 /* ---- readout + scale ---- */
 #readout {
-  position: absolute; left: 12px; bottom: 46px; z-index: 1100;
+  position: absolute; left: 12px; bottom: 12px; z-index: 1100;
   background: var(--panel); border: 1px solid var(--line);
   padding: 6px 10px; font-size: 12px; letter-spacing: 0.08em;
   font-variant-numeric: tabular-nums; color: var(--text);
@@ -112,7 +116,7 @@ body {
 }
 #readout b { color: var(--accent); }
 #scalebar {
-  position: absolute; right: 14px; bottom: 46px; z-index: 1100;
+  position: absolute; right: 14px; bottom: 12px; z-index: 1100;
   text-align: center; color: var(--text); pointer-events: none;
   text-shadow: 0 1px 3px rgba(0,0,0,0.6);
 }
@@ -131,9 +135,9 @@ body {
 #footer a:hover { text-decoration: underline; }
 @media (max-width: 760px) {
   .brand-sub { display: none; }
-  #panel { width: 212px; top: 58px; }
+  #panel { width: 212px; top: 10px; }
   #panel-collapse { display: block; }
   #panel.collapsed #panel-body { display: none; }
-  #readout { bottom: 64px; min-width: 0; }
+  #readout { bottom: 12px; min-width: 0; }
   #footer span { display: none; }
 }

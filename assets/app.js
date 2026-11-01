@@ -55,12 +55,18 @@
     for (var k in extra) o[k] = extra[k];
     return o;
   }
-  var topoLayer = L.tileLayer("tiles/" + current + "/base/{z}/{x}/{y}.webp",
-    tileOpts({ zIndex: 1 }));
+  function makeTopo(id) {
+    return L.tileLayer("tiles/" + id + "/base/{z}/{x}/{y}.webp",
+      tileOpts({ zIndex: 1 }));
+  }
+  function makeFine(id) {
+    return L.tileLayer("tiles/" + id + "/fine/{z}/{x}/{y}.webp",
+      tileOpts({ zIndex: 3, opacity: 0.95 }));
+  }
+  var topoLayer = makeTopo(current);
   var artLayer = L.tileLayer("tiles/erangel/art/{z}/{x}/{y}.webp",
     tileOpts({ zIndex: 2, opacity: 1 }));
-  var fineLayer = L.tileLayer("tiles/" + current + "/fine/{z}/{x}/{y}.webp",
-    tileOpts({ zIndex: 3, opacity: 0.95 }));
+  var fineLayer = makeFine(current);
   topoLayer.addTo(map);
 
   /* ---------- 1 km grid (canvas GridLayer) ---------- */
@@ -192,8 +198,17 @@
         x.classList.toggle("active", x === b);
       });
       current = b.dataset.map;
-      topoLayer.setUrl("tiles/" + current + "/base/{z}/{x}/{y}.webp");
-      fineLayer.setUrl("tiles/" + current + "/fine/{z}/{x}/{y}.webp");
+      // Recreate the layers instead of setUrl(): Leaflet 1.9's
+      // setUrl -> redraw path stores the raw fractional map zoom as the
+      // tile zoom, producing fractional tile URLs (…/2.5/…) that 404 and
+      // kill the layer. A fresh layer enters via _setView, which rounds.
+      var fineOn = map.hasLayer(fineLayer);
+      map.removeLayer(topoLayer);
+      if (fineOn) map.removeLayer(fineLayer);
+      topoLayer = makeTopo(current);
+      fineLayer = makeFine(current);
+      topoLayer.addTo(map);
+      if (fineOn) fineLayer.addTo(map);
       if (current !== "erangel" && baseMode === "art") {
         baseMode = "topo";
         document.querySelector("input[name='base'][value='topo']").checked = true;
