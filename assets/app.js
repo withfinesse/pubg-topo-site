@@ -30,14 +30,21 @@
     root.setAttribute("data-theme", next);
     try { localStorage.setItem("pubgtopo-theme", next); } catch (e) {}
     syncThemeBtn();
-    if (typeof refreshGrid !== "undefined") refreshGrid();
+    if (typeof refreshGrid !== "undefined" && typeof gridStyle !== "undefined") {
+      if (!gridStyle.custom) {
+        gridStyle.major.color = themeGridDefault();
+        gridStyle.minor.color = themeGridDefault();
+        syncGridInputs();
+      }
+      refreshGrid();
+    }
   });
   syncThemeBtn();
 
   /* ---------- map ---------- */
   var bounds = L.latLngBounds(L.latLng(-G, 0), L.latLng(0, G));
   var map = L.map("map", {
-    crs: L.CRS.Simple, minZoom: -MAXLVL, maxZoom: 0,
+    crs: L.CRS.Simple, minZoom: -MAXLVL, maxZoom: 2,
     zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 90,
     attributionControl: true, maxBoundsViscosity: 0.6, zoomControl: false
   });
@@ -49,7 +56,7 @@
   function tileOpts(extra) {
     var o = {
       tileSize: 256, bounds: bounds, noWrap: true,
-      zoomOffset: MAXLVL, minZoom: -MAXLVL, maxZoom: 0,
+      zoomOffset: MAXLVL, minZoom: -MAXLVL, maxZoom: 2, maxNativeZoom: 0,
       errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw="
     };
     for (var k in extra) o[k] = extra[k];
@@ -72,27 +79,58 @@
   topoLayer.addTo(map);
 
   /* ---------- grids (canvas GridLayer): 1 km cells + optional 100 m
-     minor lines, as on the in-game map. Two independent toggles; the
-     flags are read at tile-creation time, and toggling re-adds the
-     layer (a fresh layer takes the rounded _setView path — calling
-     GridLayer.redraw() at a fractional zoom corrupts its tile zoom,
-     the same Leaflet 1.9 quirk as setUrl). ---------- */
+     minor lines, as on the in-game map. Two independent toggles, each
+     with its own colour + thickness controls. Toggling or restyling
+     re-adds the layer (a fresh layer takes the rounded _setView path —
+     calling GridLayer.redraw() at a fractional zoom corrupts its tile
+     zoom, the same Leaflet 1.9 quirk as setUrl).
+
+     createTile MUST NOT declare/call the done callback: Leaflet
+     registers the tile in _tiles only AFTER createTile returns, so a
+     synchronous done() makes _tileReady look up a tile that isn't
+     registered yet — the 'leaflet-tile-loaded' class is never added
+     and the canvas stays visibility:hidden forever (the grid drew
+     perfectly into invisible tiles; exports were unaffected because
+     they draw their own grid). Declaring only (coords) makes Leaflet
+     take its sync-tile path and mark the tile ready itself. ------- */
   var majorGrid = true, minorGrid = false;
+  var gridStyle = {
+    major: { color: "#f2f5e2", width: 1.5 },
+    minor: { color: "#f2f5e2", width: 1 },
+    custom: false
+  };
+  try {
+    var gsSaved = JSON.parse(localStorage.getItem("pubgtopo-gridstyle") || "null");
+    if (gsSaved && gsSaved.major && gsSaved.minor) gridStyle = gsSaved;
+  } catch (e) {}
+  function saveGridStyle() {
+    try { localStorage.setItem("pubgtopo-gridstyle", JSON.stringify(gridStyle)); } catch (e) {}
+  }
+  function gridRgba(hex, a) {
+    var n = parseInt(hex.slice(1), 16);
+    return "rgba(" + (n >> 16 & 255) + "," + (n >> 8 & 255) + "," + (n & 255) + "," + a + ")";
+  }
+  function themeGridDefault() {
+    return root.getAttribute("data-theme") === "light" ? "#23281e" : "#f2f5e2";
+  }
+  if (!gridStyle.custom) {
+    gridStyle.major.color = themeGridDefault();
+    gridStyle.minor.color = themeGridDefault();
+  }
   var gridLayer = L.GridLayer.extend({
-    createTile: function (coords, done) {
+    createTile: function (coords) {
       var tile = L.DomUtil.create("canvas", "leaflet-tile");
       tile.width = tile.height = 256;
       var ctx = tile.getContext("2d");
       var scale = Math.pow(2, coords.z);        // screen px per latlng unit
       var nw = map.unproject(L.point(coords.x * 256, coords.y * 256), coords.z);
       var dark = root.getAttribute("data-theme") !== "light";
-      ctx.fillStyle = dark ? "rgba(235,240,220,0.85)" : "rgba(30,35,25,0.8)";
-      ctx.lineWidth = 1;
       ctx.font = "600 11px 'Segoe UI', Arial, sans-serif";
       var k, sx, sy;
       if (minorGrid) {
         var step = CELL / 10;                    // 100 m (102 m cells / 10)
-        ctx.strokeStyle = dark ? "rgba(235,240,220,0.38)" : "rgba(30,35,25,0.34)";
+        ctx.strokeStyle = gridRgba(gridStyle.minor.color, dark ? 0.42 : 0.38);
+        ctx.lineWidth = gridStyle.minor.width;
         ctx.beginPath();
         var j0 = Math.max(0, Math.ceil(nw.lng / step));
         var j1 = Math.min(80, Math.floor((nw.lng + 256 / scale) / step));
@@ -111,7 +149,9 @@
         ctx.stroke();
       }
       if (majorGrid) {
-        ctx.strokeStyle = dark ? "rgba(235,240,220,0.5)" : "rgba(30,35,25,0.45)";
+        ctx.strokeStyle = gridRgba(gridStyle.major.color, dark ? 0.55 : 0.5);
+        ctx.fillStyle = gridRgba(gridStyle.major.color, dark ? 0.9 : 0.85);
+        ctx.lineWidth = gridStyle.major.width;
         ctx.beginPath();
         for (k = 0; k <= 8; k++) {
           sx = (k * CELL - nw.lng) * scale;
@@ -136,12 +176,11 @@
           }
         }
       }
-      done(null, tile);
       return tile;
     }
   });
   var grid = new gridLayer({ tileSize: 256, bounds: bounds, zIndex: 4,
-    minZoom: -MAXLVL, maxZoom: 0, opacity: 1, pane: "tilePane" });
+    minZoom: -MAXLVL, maxZoom: 2, opacity: 1, pane: "tilePane" });
   grid.addTo(map);
   function refreshGrid() {
     var want = majorGrid || minorGrid;
@@ -237,6 +276,35 @@
   document.getElementById("grid100-toggle").addEventListener("change", function (e) {
     minorGrid = e.target.checked; refreshGrid();
   });
+  var gridColorIn = document.getElementById("grid-color");
+  var gridWidthIn = document.getElementById("grid-width");
+  var grid100ColorIn = document.getElementById("grid100-color");
+  var grid100WidthIn = document.getElementById("grid100-width");
+  function syncGridInputs() {
+    gridColorIn.value = gridStyle.major.color;
+    gridWidthIn.value = gridStyle.major.width;
+    grid100ColorIn.value = gridStyle.minor.color;
+    grid100WidthIn.value = gridStyle.minor.width;
+  }
+  var styleTimer = null;
+  function refreshGridSoon() {
+    if (styleTimer) clearTimeout(styleTimer);
+    styleTimer = setTimeout(refreshGrid, 120);
+  }
+  function bindGridStyle(colorIn, widthIn, key) {
+    colorIn.addEventListener("input", function () {
+      gridStyle[key].color = colorIn.value;
+      gridStyle.custom = true;
+      saveGridStyle(); refreshGridSoon();
+    });
+    widthIn.addEventListener("input", function () {
+      gridStyle[key].width = parseFloat(widthIn.value);
+      saveGridStyle(); refreshGridSoon();
+    });
+  }
+  bindGridStyle(gridColorIn, gridWidthIn, "major");
+  bindGridStyle(grid100ColorIn, grid100WidthIn, "minor");
+  syncGridInputs();
   document.getElementById("panel-collapse").addEventListener("click", function () {
     document.getElementById("panel").classList.toggle("collapsed");
   });
@@ -292,6 +360,13 @@
       var y0 = Math.max(0, Math.floor(-b.getNorth() * scale));
       var y1 = Math.min(total, Math.ceil(-b.getSouth() * scale));
       var w = x1 - x0, h = y1 - y0;
+      // Square export — same shape as the map itself: widen the
+      // shorter side around the view centre, clamped to the sheet.
+      var side = Math.min(total, Math.max(w, h));
+      var ccx = (x0 + x1) / 2, ccy = (y0 + y1) / 2;
+      x0 = Math.round(Math.max(0, Math.min(total - side, ccx - side / 2)));
+      y0 = Math.round(Math.max(0, Math.min(total - side, ccy - side / 2)));
+      x1 = x0 + side; y1 = y0 + side; w = side; h = side;
       var cv = document.createElement("canvas");
       cv.width = w; cv.height = h;
       var ctx = cv.getContext("2d");
@@ -319,8 +394,8 @@
       var gridOn = document.getElementById("grid-toggle").checked;
       var grid100On = document.getElementById("grid100-toggle").checked;
       if (grid100On) {
-        ctx.strokeStyle = "rgba(240,244,228,0.42)";
-        ctx.lineWidth = Math.max(1, scale / 2);
+        ctx.strokeStyle = gridRgba(gridStyle.minor.color, 0.45);
+        ctx.lineWidth = Math.max(1, gridStyle.minor.width * scale);
         ctx.beginPath();
         for (var m = 0; m <= 80; m++) {
           if (m % 10 === 0 && gridOn) continue;   // border: major pass
@@ -332,8 +407,8 @@
         ctx.stroke();
       }
       if (gridOn) {
-        ctx.strokeStyle = "rgba(240,244,228,0.55)";
-        ctx.lineWidth = Math.max(1, scale / 2);
+        ctx.strokeStyle = gridRgba(gridStyle.major.color, 0.6);
+        ctx.lineWidth = Math.max(1, gridStyle.major.width * scale);
         ctx.beginPath();
         for (var k = 0; k <= 8; k++) {
           var gx = k * CELL * scale - x0;
@@ -342,7 +417,7 @@
           if (gy >= 0 && gy <= h) { ctx.moveTo(0, gy); ctx.lineTo(w, gy); }
         }
         ctx.stroke();
-        ctx.fillStyle = "rgba(240,244,228,0.9)";
+        ctx.fillStyle = gridRgba(gridStyle.major.color, 0.9);
         ctx.font = "600 " + Math.max(11, 26 * scale) + "px 'Segoe UI', Arial, sans-serif";
         ctx.textAlign = "center";
         if (y0 === 0)
