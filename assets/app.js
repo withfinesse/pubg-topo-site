@@ -37,7 +37,7 @@
   /* ---------- map ---------- */
   var bounds = L.latLngBounds(L.latLng(-G, 0), L.latLng(0, G));
   var map = L.map("map", {
-    crs: L.CRS.Simple, minZoom: -MAXLVL - 1, maxZoom: 1,
+    crs: L.CRS.Simple, minZoom: -MAXLVL, maxZoom: 0,
     zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 90,
     attributionControl: true, maxBoundsViscosity: 0.6, zoomControl: false
   });
@@ -49,7 +49,7 @@
   function tileOpts(extra) {
     var o = {
       tileSize: 256, bounds: bounds, noWrap: true,
-      zoomOffset: MAXLVL, minNativeZoom: 0, maxNativeZoom: MAXLVL,
+      zoomOffset: MAXLVL, minZoom: -MAXLVL, maxZoom: 0,
       errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw="
     };
     for (var k in extra) o[k] = extra[k];
@@ -105,7 +105,7 @@
     }
   });
   var grid = new gridLayer({ tileSize: 256, bounds: bounds, zIndex: 4,
-    opacity: 1, pane: "tilePane" });
+    minZoom: -MAXLVL, maxZoom: 0, opacity: 1, pane: "tilePane" });
   grid.addTo(map);
 
   /* ---------- readout + scale bar ---------- */
