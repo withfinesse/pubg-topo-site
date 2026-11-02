@@ -131,7 +131,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=10")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=11")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -261,44 +261,79 @@
                               minSep, avoid) {
     var cand = segsInRect(data.base, x0, y0, x1, y1)
       .filter(function (s) { return s.lvl % 50 === 0; });
+    // Labels anchor on the longest VISIBLE run of each line — a
+    // ring's whole-length midpoint is usually off-screen at deep
+    // zoom, which left close-ups with no elevation labels at all.
+    var pa = project(x0, y0), pb = project(x1, y1);
+    var vx0 = Math.min(pa[0], pb[0]), vx1 = Math.max(pa[0], pb[0]);
+    var vy0 = Math.min(pa[1], pb[1]), vy1 = Math.max(pa[1], pb[1]);
+    var rx0 = vx0 - 30, rx1 = vx1 + 30;
+    var ry0 = vy0 - 30, ry1 = vy1 + 30;
     var scored = [];
     cand.forEach(function (s) {
-      var p = s.pts, pts = [], len = 0, prev = null;
-      for (var j = 0; j < p.length / 2; j++) {
-        var q = project(p[j * 2], p[j * 2 + 1]);
-        pts.push(q);
-        if (prev) len += Math.hypot(q[0] - prev[0], q[1] - prev[1]);
+      var p = s.pts, pts = [];
+      for (var j = 0; j < p.length / 2; j++)
+        pts.push(project(p[j * 2], p[j * 2 + 1]));
+      var best = null, runStart = 0, runLen = 0, prev = null;
+      for (var j2 = 0; j2 <= pts.length; j2++) {
+        var q = j2 < pts.length ? pts[j2] : null;
+        var inside = q && q[0] >= rx0 && q[0] <= rx1 &&
+                     q[1] >= ry0 && q[1] <= ry1;
+        if (inside && prev)
+          runLen += Math.hypot(q[0] - prev[0], q[1] - prev[1]);
+        if (!inside) {
+          if (runLen > 0 && (!best || runLen > best.len))
+            best = { from: runStart, to: j2 - 1, len: runLen };
+          runStart = j2 + 1; runLen = 0;
+        }
         prev = q;
       }
-      if (len >= minLen) scored.push({ s: s, pts: pts, len: len });
+      if (best && best.len >= minLen && best.to > best.from)
+        scored.push({ s: s, pts: pts, len: best.len,
+                      from: best.from, to: best.to });
     });
     scored.sort(function (a, b) { return b.len - a.len; });
     var placed = [], spots = (avoid || []).slice();
+    var fracs = [0.5, 0.3, 0.7, 0.15, 0.85];
     for (var i = 0; i < scored.length && placed.length < 16; i++) {
-      var pts = scored[i].pts, total = scored[i].len, target = total * 0.55;
-      var acc = 0, at = null, ang = 0;
-      for (var j = 1; j < pts.length; j++) {
-        var d = Math.hypot(pts[j][0] - pts[j - 1][0],
-                           pts[j][1] - pts[j - 1][1]);
-        if (acc + d >= target) {
-          at = pts[j];
-          ang = Math.atan2(pts[j][1] - pts[j - 1][1],
-                           pts[j][0] - pts[j - 1][0]);
-          break;
+      var pts = scored[i].pts;
+      var done = false;
+      // Try several anchor positions along the visible run: the
+      // middle one often lands too close to a place label or an
+      // already-placed index label, and the line still deserves one.
+      for (var fi = 0; fi < fracs.length && !done; fi++) {
+        var target = scored[i].len * fracs[fi];
+        var acc = 0, at = null, ang = 0;
+        for (var j = scored[i].from + 1; j <= scored[i].to; j++) {
+          var d = Math.hypot(pts[j][0] - pts[j - 1][0],
+                             pts[j][1] - pts[j - 1][1]);
+          if (acc + d >= target) {
+            at = pts[j];
+            ang = Math.atan2(pts[j][1] - pts[j - 1][1],
+                             pts[j][0] - pts[j - 1][0]);
+            break;
+          }
+          acc += d;
         }
-        acc += d;
+        if (!at) break;
+        // the anchor itself must be inside the frame, not just the
+        // run — a ring's middle anchor can sit past the edge, where
+        // the draw step would drop it and the line goes unlabelled
+        if (at[0] < vx0 || at[0] > vx1 || at[1] < vy0 || at[1] > vy1)
+          continue;
+        var ok = true;
+        for (var k = 0; k < spots.length; k++)
+          if (Math.hypot(spots[k][0] - at[0], spots[k][1] - at[1]) < minSep) {
+            ok = false; break;
+          }
+        if (!ok) continue;
+        if (ang > Math.PI / 2) ang -= Math.PI;
+        if (ang < -Math.PI / 2) ang += Math.PI;
+        placed.push({ x: at[0], y: at[1], ang: ang,
+                      text: scored[i].s.lvl + " m" });
+        spots.push(at);
+        done = true;
       }
-      if (!at) continue;
-      var ok = true;
-      for (var k = 0; k < spots.length; k++)
-        if (Math.hypot(spots[k][0] - at[0], spots[k][1] - at[1]) < minSep) {
-          ok = false; break;
-        }
-      if (!ok) continue;
-      if (ang > Math.PI / 2) ang -= Math.PI;
-      if (ang < -Math.PI / 2) ang += Math.PI;
-      placed.push({ x: at[0], y: at[1], ang: ang, text: scored[i].s.lvl + " m" });
-      spots.push(at);
     }
     return placed;
   }
