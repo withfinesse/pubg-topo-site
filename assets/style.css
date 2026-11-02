@@ -87,6 +87,9 @@ body {
 .slider-row { justify-content: space-between; }
 .slider-row input[type="range"] { width: 118px; accent-color: var(--accent); }
 .note { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin: 6px 0 2px; }
+#key-grad { height: 10px; border: 1px solid var(--line); }
+#key-ticks { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); margin-top: 2px; }
+.key-water { display: inline-block; width: 10px; height: 10px; background: #9ec2db; border: 1px solid var(--line); vertical-align: -1px; margin-right: 5px; }
 #export-btn {
   width: 100%; font: inherit; font-size: 12px; letter-spacing: 0.12em;
   background: var(--btn-active); color: var(--accent);

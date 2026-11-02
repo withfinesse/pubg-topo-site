@@ -14,6 +14,42 @@
   var current = "erangel";
   var baseMode = "topo";
 
+  /* Height colour and contour lines are independent toggles (Joel,
+     2026-11-02): the topo base ships in two tile variants — vivid
+     height colour baked over the hillshade, and hillshade alone —
+     and the toggle swaps which set the base layer reads. Lines are
+     the vector overlay, already separate. Both persist. */
+  var heightColour = true, linesOn = true;
+  try {
+    var tgSaved = JSON.parse(localStorage.getItem("pubgtopo-toggles") || "null");
+    if (tgSaved) {
+      if (typeof tgSaved.colour === "boolean") heightColour = tgSaved.colour;
+      if (typeof tgSaved.lines === "boolean") linesOn = tgSaved.lines;
+    }
+  } catch (e) {}
+  function saveToggles() {
+    try {
+      localStorage.setItem("pubgtopo-toggles",
+        JSON.stringify({ colour: heightColour, lines: linesOn }));
+    } catch (e) {}
+  }
+  /* The two height-colour ramps, mirroring pubgtopo.render
+     (VIVID_STOPS for the topo sheet, SAND_STOPS blended into the
+     map art) — used for the panel key's gradient bar. */
+  var RAMP_VIVID = [[0, "#4cc95e"], [0.04, "#a4dd4f"], [0.10, "#e9e83e"],
+    [0.18, "#f9cf2e"], [0.28, "#fdb913"], [0.38, "#fb9e13"],
+    [0.48, "#f98e09"], [0.60, "#ef6a12"], [0.72, "#e8571e"],
+    [0.84, "#dd3550"], [0.92, "#e85d8a"], [1, "#f2a7c3"]];
+  var RAMP_SAND = [[0, "#ddd29b"], [0.10, "#e3d68f"], [0.22, "#e8c877"],
+    [0.36, "#eab54f"], [0.50, "#e09a3e"], [0.62, "#cf7a2e"],
+    [0.74, "#b85c24"], [0.84, "#96431f"], [0.92, "#7c4a2d"],
+    [1, "#e8e3da"]];
+  function rampCss(stops) {
+    return "linear-gradient(90deg," + stops.map(function (s) {
+      return s[1] + " " + Math.round(s[0] * 100) + "%";
+    }).join(",") + ")";
+  }
+
   /* ---------- theme ---------- */
   var root = document.documentElement;
   try {
@@ -67,6 +103,13 @@
     return L.tileLayer("tiles/" + id + "/base/{z}/{x}/{y}.webp",
       tileOpts({ zIndex: 1 }));
   }
+  function makeShade(id) {
+    return L.tileLayer("tiles/" + id + "/shade/{z}/{x}/{y}.webp",
+      tileOpts({ zIndex: 1 }));
+  }
+  function makeBaseLayer(id) {
+    return heightColour ? makeTopo(id) : makeShade(id);
+  }
   function makeFine(id) {
     return L.tileLayer("tiles/" + id + "/fine/{z}/{x}/{y}.webp",
       tileOpts({ zIndex: 4, opacity: 0.95 }));
@@ -75,7 +118,7 @@
     return L.tileLayer("tiles/" + id + "/art/{z}/{x}/{y}.webp",
       tileOpts({ zIndex: 2, opacity: 1 }));
   }
-  var topoLayer = makeTopo(current);
+  var topoLayer = makeBaseLayer(current);
   var artLayer = makeArt(current);
   var fineLayer = makeFine(current);
   topoLayer.addTo(map);
@@ -209,7 +252,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=17")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=18")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -393,10 +436,16 @@
     else if (!want && on) map.removeLayer(fineLineLayer);
     else if (want && on) fineLineLayer._reset();
   }
+  function syncLines() {
+    var want = linesOn && !!vecCache[current];
+    var on = map.hasLayer(baseLineLayer);
+    if (want && !on) baseLineLayer.addTo(map);
+    else if (!want && on) map.removeLayer(baseLineLayer);
+    else if (want && on) baseLineLayer._reset();
+  }
   function refreshLineLayers() {
     if (!vecCache[current]) return;
-    if (!map.hasLayer(baseLineLayer)) baseLineLayer.addTo(map);
-    else baseLineLayer._reset();
+    syncLines();
     syncFineLines();
   }
 
@@ -544,7 +593,7 @@
       });
     }
     var data = vecCache[current];
-    if (data && full) {
+    if (data && full && linesOn) {
       var nw = map.containerPointToLatLng(L.point(0, 0));
       var se = map.containerPointToLatLng(L.point(size.x, size.y));
       var zScale = Math.pow(2, map.getZoom());  // screen px per unit
@@ -810,6 +859,18 @@
     document.getElementById("map-name").textContent = MAPS[current].name;
     document.getElementById("map-stats").textContent = MAPS[current].stats;
     syncLabels();
+    syncKey();
+  }
+  /* The panel key follows the active base: the vivid ramp on the
+     topo sheet, the sand ramp on the art (where the tint is blended
+     into the art tiles themselves). On the topo sheet with height
+     colour off, the bar dims — the ramp isn't in use. */
+  var keyGrad = document.getElementById("key-grad");
+  function syncKey() {
+    keyGrad.style.background =
+      rampCss(baseMode === "art" ? RAMP_SAND : RAMP_VIVID);
+    keyGrad.style.opacity =
+      baseMode === "topo" && !heightColour ? "0.3" : "1";
   }
   function syncLabels() {
     // Place labels are drawn on the vector overlay canvas now —
@@ -819,6 +880,26 @@
     drawVecLabels(true);
   }
   labelsToggle.addEventListener("change", syncLabels);
+  var colourToggle = document.getElementById("colour-toggle");
+  var linesToggle = document.getElementById("lines-toggle");
+  colourToggle.checked = heightColour;
+  linesToggle.checked = linesOn;
+  colourToggle.addEventListener("change", function (e) {
+    heightColour = e.target.checked;
+    saveToggles();
+    // Swap the base tile layer (recreate, never setUrl — see the
+    // map-switch handler for why). Z-index keeps it under art/fine.
+    map.removeLayer(topoLayer);
+    topoLayer = makeBaseLayer(current);
+    topoLayer.addTo(map);
+    syncKey();
+  });
+  linesToggle.addEventListener("change", function (e) {
+    linesOn = e.target.checked;
+    saveToggles();
+    syncLines();
+    drawVecLabels(true);   // index labels belong to the lines
+  });
   document.querySelectorAll("input[name='base']").forEach(function (r) {
     r.addEventListener("change", function () { baseMode = r.value; syncBase(); });
   });
@@ -883,7 +964,7 @@
       map.removeLayer(topoLayer);
       if (map.hasLayer(artLayer)) map.removeLayer(artLayer);
       if (fineOn) map.removeLayer(fineLayer);
-      topoLayer = makeTopo(current);
+      topoLayer = makeBaseLayer(current);
       artLayer = makeArt(current);
       fineLayer = makeFine(current);
       topoLayer.addTo(map);
@@ -947,7 +1028,9 @@
         }));
         ctx.globalAlpha = 1;
       }
-      await blit("tiles/" + current + "/base/{z}/{x}/{y}.webp", 1);
+      await blit(heightColour
+        ? "tiles/" + current + "/base/{z}/{x}/{y}.webp"
+        : "tiles/" + current + "/shade/{z}/{x}/{y}.webp", 1);
       if (baseMode === "art")
         await blit("tiles/" + current + "/art/{z}/{x}/{y}.webp", artOpacity.value / 100);
       if (document.getElementById("fine-toggle").checked)
@@ -961,8 +1044,9 @@
         if (document.getElementById("fine-toggle").checked)
           drawLineSet(ctx, vdata.fine, expProject, x0 / scale, y0 / scale,
             x1 / scale, y1 / scale, "fine", scale);
-        drawLineSet(ctx, vdata.base, expProject, x0 / scale, y0 / scale,
-          x1 / scale, y1 / scale, "base", scale);
+        if (linesOn)
+          drawLineSet(ctx, vdata.base, expProject, x0 / scale, y0 / scale,
+            x1 / scale, y1 / scale, "base", scale);
       }
       var gridOn = document.getElementById("grid-toggle").checked;
       var grid100On = document.getElementById("grid100-toggle").checked;
@@ -1029,9 +1113,9 @@
             avoidE.push([ex, ey]);
           });
         }
-        var spotsE = collectIndexLabels(vdata, expProject, x0 / scale,
+        var spotsE = linesOn ? collectIndexLabels(vdata, expProject, x0 / scale,
           y0 / scale, x1 / scale, y1 / scale, 240 * scale, 230 * scale,
-          avoidE);
+          avoidE) : [];
         ctx.font = "600 " + Math.max(9, 13 * scale) +
           "px 'Segoe UI', Arial, sans-serif";
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -1049,13 +1133,34 @@
       }
       var ctr = fmt(map.getCenter());
       ctx.fillStyle = "rgba(8,10,8,0.72)";
-      ctx.fillRect(0, h - 30, w, 30);
+      ctx.fillRect(0, h - 44, w, 44);
       ctx.fillStyle = "#d8dcc9";
       ctx.font = "12px 'Segoe UI', Arial, sans-serif";
       ctx.textAlign = "left";
       ctx.fillText("PUBG TOPO · " + MAPS[current].name +
         (ctr ? " · centre grid " + ctr.cell : "") +
-        " · unofficial fan project", 10, h - 11);
+        " · unofficial fan project", 10, h - 26);
+      // Key strip: the active ramp (dimmed when the topo sheet's
+      // height colour is off) + the water swatch, so a printed
+      // export still explains itself.
+      var expStops = baseMode === "art" ? RAMP_SAND : RAMP_VIVID;
+      var grad = ctx.createLinearGradient(10, 0, 230, 0);
+      expStops.forEach(function (s) { grad.addColorStop(s[0], s[1]); });
+      ctx.save();
+      if (baseMode === "topo" && !heightColour) ctx.globalAlpha = 0.35;
+      ctx.fillStyle = grad;
+      ctx.fillRect(10, h - 18, 220, 8);
+      ctx.restore();
+      ctx.fillStyle = "#d8dcc9";
+      ctx.font = "10px 'Segoe UI', Arial, sans-serif";
+      ctx.fillText("0 m", 10, h - 2);
+      ctx.textAlign = "right";
+      ctx.fillText("250 m", 230, h - 2);
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#9ec2db";
+      ctx.fillRect(252, h - 18, 14, 8);
+      ctx.fillStyle = "#d8dcc9";
+      ctx.fillText("water", 272, h - 2);
       cv.toBlob(function (blob) {
         var a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
