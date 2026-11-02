@@ -71,9 +71,12 @@
     return L.tileLayer("tiles/" + id + "/fine/{z}/{x}/{y}.webp",
       tileOpts({ zIndex: 4, opacity: 0.95 }));
   }
+  function makeArt(id) {
+    return L.tileLayer("tiles/" + id + "/art/{z}/{x}/{y}.webp",
+      tileOpts({ zIndex: 2, opacity: 1 }));
+  }
   var topoLayer = makeTopo(current);
-  var artLayer = L.tileLayer("tiles/erangel/art/{z}/{x}/{y}.webp",
-    tileOpts({ zIndex: 2, opacity: 1 }));
+  var artLayer = makeArt(current);
   var fineLayer = makeFine(current);
   topoLayer.addTo(map);
 
@@ -206,7 +209,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=14")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=15")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -772,7 +775,7 @@
   var artRadio = document.getElementById("base-art-radio");
 
   function syncBase() {
-    var wantArt = baseMode === "art" && current === "erangel";
+    var wantArt = baseMode === "art";
     if (wantArt) {
       if (!map.hasLayer(artLayer)) artLayer.addTo(map);
       artLayer.setOpacity(artOpacity.value / 100);
@@ -780,11 +783,7 @@
       map.removeLayer(artLayer);
     }
     artOpacity.disabled = !wantArt;
-    artRadio.disabled = current !== "erangel";
-    artRadio.parentNode.classList.toggle("disabled", current !== "erangel");
-    artNote.textContent = current === "erangel"
-      ? "Art overlay: topo drawn over the official map art. Slider crossfades it against the topo sheet."
-      : "Art overlay: Erangel only (official art alignment is verified for Erangel).";
+    artNote.textContent = "Art overlay: topo drawn over the official map art. Slider crossfades it against the topo sheet.";
     var poisNow = curPois();
     labelsNote.textContent = poisNow
       ? "Place labels: " + poisNow.length + " named locations from the official map art, on their own layer above everything else."
@@ -863,18 +862,16 @@
       // kill the layer. A fresh layer enters via _setView, which rounds.
       var fineOn = map.hasLayer(fineLayer);
       map.removeLayer(topoLayer);
+      if (map.hasLayer(artLayer)) map.removeLayer(artLayer);
       if (fineOn) map.removeLayer(fineLayer);
       topoLayer = makeTopo(current);
+      artLayer = makeArt(current);
       fineLayer = makeFine(current);
       topoLayer.addTo(map);
       if (fineOn) fineLayer.addTo(map);
       loadVectors(current);
       refreshLineLayers();
       drawVecLabels(true);
-      if (current !== "erangel" && baseMode === "art") {
-        baseMode = "topo";
-        document.querySelector("input[name='base'][value='topo']").checked = true;
-      }
       syncBase();
     });
   });
@@ -932,8 +929,8 @@
         ctx.globalAlpha = 1;
       }
       await blit("tiles/" + current + "/base/{z}/{x}/{y}.webp", 1);
-      if (baseMode === "art" && current === "erangel")
-        await blit("tiles/erangel/art/{z}/{x}/{y}.webp", artOpacity.value / 100);
+      if (baseMode === "art")
+        await blit("tiles/" + current + "/art/{z}/{x}/{y}.webp", artOpacity.value / 100);
       if (document.getElementById("fine-toggle").checked)
         await blit("tiles/" + current + "/fine/{z}/{x}/{y}.webp", 0.95);
       var expProject = function (x, y) {
