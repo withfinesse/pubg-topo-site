@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vector contours — proof of concept</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #101410; overflow: hidden;
+    font-family: "Segoe UI", Arial, sans-serif; color: #e6ead9; }
+  #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+    cursor: grab; touch-action: none; }
+  #cv:active { cursor: grabbing; }
+  #bar { position: absolute; top: 10px; left: 10px; z-index: 5;
+    background: rgba(10, 13, 10, 0.88); border: 1px solid #4a5548;
+    padding: 10px 12px; max-width: 340px; }
+  #bar h1 { font-size: 14px; margin: 0 0 2px; letter-spacing: 0.14em; }
+  #bar p { font-size: 12px; margin: 4px 0; color: #b9c2ab; line-height: 1.45; }
+  #bar .row { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 2px; }
+  button { font: inherit; font-size: 12px; letter-spacing: 0.06em;
+    background: #1d241c; color: #e6ead9; border: 1px solid #4a5548;
+    padding: 6px 10px; cursor: pointer; }
+  button.active { background: #37402f; border-color: #c8b06a; color: #f0d9a0; }
+  label { font-size: 12.5px; display: inline-flex; gap: 5px; align-items: center;
+    margin-right: 10px; cursor: pointer; }
+  #zoom { position: absolute; right: 10px; bottom: 10px; z-index: 5;
+    background: rgba(10, 13, 10, 0.85); border: 1px solid #4a5548;
+    font-size: 12px; padding: 6px 10px; letter-spacing: 0.08em; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="bar">
+  <h1>VECTOR CONTOURS — POC</h1>
+  <p>Erangel, the Stalber massif (2.2 × 2.2 km). Drag to pan, scroll or
+     pinch to zoom. Zoom deep: the <b>shading</b> stretches and softens in
+     both modes — watch what the <b>lines</b> do.</p>
+  <div class="row">
+    <button id="m-vector" class="active">VECTOR LINES</button>
+    <button id="m-raster">RASTER (CURRENT SITE)</button>
+  </div>
+  <div class="row">
+    <label><input type="checkbox" id="fine" checked> 2 m fine contours</label>
+    <label><input type="checkbox" id="labels" checked> Place labels</label>
+  </div>
+  <div class="row">
+    <button id="zin">ZOOM +</button>
+    <button id="zout">ZOOM −</button>
+    <button id="zfit">FIT</button>
+  </div>
+</div>
+<div id="zoom">100%</div>
+
+<script>
+"use strict";
+var W = { x0: 5.2, x1: 7.4, y0: 8.16 - 3.1, y1: 8.16 - 0.9 }; // km, y from south
+var cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+var shading = new Image(), raster = new Image();
+var data = null, mode = "vector";
+var view = { s: 100, ox: 0, oy: 0 }, fitS = 100; // s = px per km
+var DPR = window.devicePixelRatio || 1;
+
+function resize() {
+  cv.width = Math.round(innerWidth * DPR);
+  cv.height = Math.round(innerHeight * DPR);
+  draw();
+}
+function fit() {
+  fitS = Math.min(innerWidth, innerHeight) / (W.x1 - W.x0) * 0.98;
+  view.s = fitS;
+  view.ox = (innerWidth - (W.x1 - W.x0) * view.s) / 2;
+  view.oy = (innerHeight - (W.y1 - W.y0) * view.s) / 2;
+  draw();
+}
+// km (y from south) -> screen px
+function X(x) { return view.ox + (x - W.x0) * view.s; }
+function Y(y) { return view.oy + (W.y1 - y) * view.s; }
+
+function strokePaths(list, idx) {
+  ctx.beginPath();
+  for (var i = 0; i < list.length; i++) {
+    var p = list[i][1];
+    ctx.moveTo(X(p[0][0]), Y(p[0][1]));
+    for (var j = 1; j < p.length; j++) ctx.lineTo(X(p[j][0]), Y(p[j][1]));
+  }
+  ctx.stroke();
+}
+function pathLen(p) {
+  var L = 0;
+  for (var j = 1; j < p.length; j++) {
+    var dx = (p[j][0] - p[j - 1][0]) * view.s, dy = (p[j][1] - p[j - 1][1]) * view.s;
+    L += Math.sqrt(dx * dx + dy * dy);
+  }
+  return L;
+}
+function drawIndexLabels(idxPaths) {
+  ctx.font = "600 12px 'Segoe UI', Arial, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (var i = 0; i < idxPaths.length; i++) {
+    var lvl = idxPaths[i][0], p = idxPaths[i][1];
+    if (pathLen(p) < 260) continue;
+    var mid = p[Math.floor(p.length * 0.5)];
+    var nxt = p[Math.min(p.length - 1, Math.floor(p.length * 0.5) + 2)];
+    var ang = Math.atan2(Y(nxt[1]) - Y(mid[1]), X(nxt[0]) - X(mid[0]));
+    if (ang > Math.PI / 2) ang -= Math.PI;
+    if (ang < -Math.PI / 2) ang += Math.PI;
+    ctx.save();
+    ctx.translate(X(mid[0]), Y(mid[1]));
+    ctx.rotate(-ang);
+    ctx.lineWidth = 4; ctx.strokeStyle = "rgba(238,240,226,0.92)";
+    var t = lvl + " m";
+    ctx.strokeText(t, 0, 0);
+    ctx.fillStyle = "#3d2c1c";
+    ctx.fillText(t, 0, 0);
+    ctx.restore();
+  }
+}
+function draw() {
+  if (!data && mode === "vector") return;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = "#0d100d";
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  var img = mode === "vector" ? shading : raster;
+  if (img.complete && img.naturalWidth)
+    ctx.drawImage(img, X(W.x0), Y(W.y1), (W.x1 - W.x0) * view.s, (W.y1 - W.y0) * view.s);
+  if (mode === "vector") {
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    if (document.getElementById("fine").checked) {
+      ctx.strokeStyle = "rgba(74,56,38,0.55)"; ctx.lineWidth = 0.8;
+      strokePaths(data.fine, false);
+    }
+    ctx.strokeStyle = "rgba(90,70,50,0.75)"; ctx.lineWidth = 1.0;
+    strokePaths(data.base.filter(function (e) { return e[0] % 50 !== 0; }), false);
+    var idx = data.base.filter(function (e) { return e[0] % 50 === 0; });
+    ctx.strokeStyle = "rgba(61,44,28,0.92)"; ctx.lineWidth = 1.9;
+    strokePaths(idx, true);
+    drawIndexLabels(idx);
+    if (document.getElementById("labels").checked) {
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      data.labels.forEach(function (l) {
+        var size = l.tier === 1 ? 25 : l.tier === 2 ? 19 : 15;
+        ctx.font = (l.tier === 1 ? "700 " : "600 ") + size + "px 'Segoe UI', Arial, sans-serif";
+        ctx.lineWidth = 5; ctx.strokeStyle = "rgba(245,246,238,0.95)";
+        ctx.strokeText(l.name, X(l.km[0]), Y(l.km[1]));
+        ctx.fillStyle = "#14161a";
+        ctx.fillText(l.name, X(l.km[0]), Y(l.km[1]));
+      });
+    }
+  }
+  document.getElementById("zoom").textContent = Math.round(view.s / fitS * 100) + "%";
+}
+function zoomAt(cx, cy, f) {
+  var ns = Math.min(fitS * 14, Math.max(fitS * 0.5, view.s * f));
+  var k = ns / view.s;
+  view.ox = cx - (cx - view.ox) * k;
+  view.oy = cy - (cy - view.oy) * k;
+  view.s = ns;
+  draw();
+}
+cv.addEventListener("wheel", function (e) {
+  e.preventDefault();
+  zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.18 : 1 / 1.18);
+}, { passive: false });
+var drag = null;
+cv.addEventListener("pointerdown", function (e) { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener("pointermove", function (e) {
+  if (!drag) return;
+  view.ox += e.clientX - drag.x; view.oy += e.clientY - drag.y;
+  drag = { x: e.clientX, y: e.clientY };
+  draw();
+});
+cv.addEventListener("pointerup", function () { drag = null; });
+document.getElementById("zin").onclick = function () { zoomAt(innerWidth / 2, innerHeight / 2, 1.5); };
+document.getElementById("zout").onclick = function () { zoomAt(innerWidth / 2, innerHeight / 2, 1 / 1.5); };
+document.getElementById("zfit").onclick = fit;
+document.getElementById("fine").onchange = draw;
+document.getElementById("labels").onchange = draw;
+function setMode(m) {
+  mode = m;
+  document.getElementById("m-vector").classList.toggle("active", m === "vector");
+  document.getElementById("m-raster").classList.toggle("active", m === "raster");
+  draw();
+}
+document.getElementById("m-vector").onclick = function () { setMode("vector"); };
+document.getElementById("m-raster").onclick = function () { setMode("raster"); };
+addEventListener("resize", resize);
+shading.src = "shading.png";
+raster.src = "raster.png";
+shading.onload = raster.onload = function () { draw(); };
+fetch("contours.json").then(function (r) { return r.json(); }).then(function (j) {
+  data = j;
+  resize(); fit();
+});
+</script>
+</body>
+</html>
