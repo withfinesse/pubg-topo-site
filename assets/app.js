@@ -49,6 +49,7 @@
     attributionControl: true, maxBoundsViscosity: 0.6, zoomControl: false
   });
   L.control.zoom({ position: "topright" }).addTo(map);
+  window.pubgtopoMap = map;   // handle for the verification suite
   map.attributionControl.setPrefix(false);
   map.attributionControl.addAttribution("Terrain: PUBG game files via pubgtopo");
   map.fitBounds(bounds);
@@ -68,15 +69,300 @@
   }
   function makeFine(id) {
     return L.tileLayer("tiles/" + id + "/fine/{z}/{x}/{y}.webp",
-      tileOpts({ zIndex: 3, opacity: 0.95 }));
+      tileOpts({ zIndex: 4, opacity: 0.95 }));
   }
   var topoLayer = makeTopo(current);
   var artLayer = L.tileLayer("tiles/erangel/art/{z}/{x}/{y}.webp",
     tileOpts({ zIndex: 2, opacity: 1 }));
   var fineLayer = makeFine(current);
-  var labelsLayer = L.tileLayer("tiles/erangel/labels/{z}/{x}/{y}.webp",
-    tileOpts({ zIndex: 6 }));
   topoLayer.addTo(map);
+
+  /* ---------- vector contour linework ----------
+     The base sheets are line-free shading now: every contour line
+     (10 m base + labelled 50 m index, and the 2 m fine layer) and
+     every text label is drawn live from vector data
+     (vectors/<map>.bin.gz: segments in master px, quantised x8),
+     so lines stay crisp at ANY zoom instead of stretching with the
+     tiles. Data is bucketed into the 8x8 grid cells for lookup.
+     Line layers are canvas GridLayers and obey the same rule as
+     the grid: createTile declares only (coords), never calls done. */
+  var POIS = [{n:"Zharki",t:1,x:539.1,y:645.5},{n:"Severny",t:1,x:1938.1,y:605.4},{n:"Stalber",t:1,x:2866.7,y:654.1},{n:"Kameshki",t:1,x:3343.1,y:517.0},{n:"Shooting Range",t:2,x:1704.7,y:914.1},{n:"Georgopol",t:1,x:925.1,y:1274.0},{n:"Yasnaya Polyana",t:1,x:2770.8,y:1173.1},{n:"Rozhok",t:2,x:2012.9,y:1434.6},{n:"Boatyard",t:2,x:1781.5,y:1581.7},{n:"Hospital",t:2,x:769.0,y:1623.3},{n:"Mansion",t:2,x:3117.7,y:1559.6},{n:"Lipovka",t:1,x:3556.9,y:1645.9},{n:"School",t:2,x:2085.6,y:1671.5},{n:"Ruins",t:2,x:1584.7,y:1685.6},{n:"Gatka",t:1,x:1090.3,y:1929.5},{n:"Prison",t:2,x:3134.7,y:1850.2},{n:"Shelter",t:2,x:2856.2,y:1975.7},{n:"Pochinki",t:1,x:1830.1,y:2065.6},{n:"Mylta Power",t:2,x:3649.3,y:2211.1},{n:"Farm",t:2,x:2679.0,y:2282.4},{n:"Mylta",t:1,x:3080.5,y:2344.7},{n:"Quarry",t:2,x:909.1,y:2718.6},{n:"Ferry Pier",t:2,x:1423.6,y:2898.8},{n:"Sosnovka Island",t:"R",x:2258.3,y:3009.3},{n:"Primorsk",t:1,x:812.2,y:3028.8},{n:"Novorepnoye",t:1,x:3131.7,y:3062.0},{n:"Sosnovka Military Base",t:1,x:2249.8,y:3299.4}];
+  var vecCache = {}, vecPromise = {};
+  function bucketize(segs) {
+    var buckets = [];
+    for (var i = 0; i < 64; i++) buckets.push([]);
+    segs.forEach(function (s, idx) {
+      var cx0 = Math.max(0, Math.floor(s.minx / CELL)),
+          cx1 = Math.min(7, Math.floor(s.maxx / CELL));
+      var cy0 = Math.max(0, Math.floor(s.miny / CELL)),
+          cy1 = Math.min(7, Math.floor(s.maxy / CELL));
+      for (var cy = cy0; cy <= cy1; cy++)
+        for (var cx = cx0; cx <= cx1; cx++) buckets[cy * 8 + cx].push(idx);
+    });
+    return buckets;
+  }
+  function parseVectors(buf) {
+    var dv = new DataView(buf);
+    var magic = String.fromCharCode(dv.getUint8(0), dv.getUint8(1),
+      dv.getUint8(2), dv.getUint8(3));
+    if (magic !== "PTV1") throw new Error("bad vector data");
+    var off = 4;
+    function section() {
+      var n = dv.getUint32(off, true); off += 4;
+      var segs = [];
+      for (var i = 0; i < n; i++) {
+        var lvl = dv.getInt16(off, true); off += 2;
+        var np = dv.getUint32(off, true); off += 4;
+        var pts = new Float32Array(np * 2);
+        var minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+        for (var j = 0; j < np; j++) {
+          var x = dv.getUint16(off, true) / 8; off += 2;
+          var y = dv.getUint16(off, true) / 8; off += 2;
+          pts[j * 2] = x; pts[j * 2 + 1] = y;
+          if (x < minx) minx = x; if (x > maxx) maxx = x;
+          if (y < miny) miny = y; if (y > maxy) maxy = y;
+        }
+        segs.push({ lvl: lvl, pts: pts, minx: minx, miny: miny,
+                    maxx: maxx, maxy: maxy });
+      }
+      return { segs: segs, buckets: bucketize(segs) };
+    }
+    return { base: section(), fine: section() };
+  }
+  function loadVectors(id) {
+    if (vecPromise[id]) return vecPromise[id];
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=10")
+      .then(function (r) { return r.arrayBuffer(); })
+      .then(function (buf) {
+        // Pages may add its own content-encoding on top; if the
+        // bytes arrive already inflated, the PTV1 magic is visible.
+        var b = new Uint8Array(buf);
+        if (b[0] === 0x50 && b[1] === 0x54) return buf;
+        var stream = new DecompressionStream("gzip");
+        return new Response(
+          new Blob([buf]).stream().pipeThrough(stream)).arrayBuffer();
+      })
+      .then(function (raw) {
+        vecCache[id] = parseVectors(raw);
+        if (id === current) { refreshLineLayers(); drawVecLabels(); }
+        return vecCache[id];
+      })
+      .catch(function () { return null; });  // shading still works
+    return vecPromise[id];
+  }
+  function segsInRect(set, x0, y0, x1, y1) {
+    var cx0 = Math.max(0, Math.floor(x0 / CELL)),
+        cx1 = Math.min(7, Math.floor(x1 / CELL));
+    var cy0 = Math.max(0, Math.floor(y0 / CELL)),
+        cy1 = Math.min(7, Math.floor(y1 / CELL));
+    var seen = {}, out = [];
+    for (var cy = cy0; cy <= cy1; cy++)
+      for (var cx = cx0; cx <= cx1; cx++) {
+        var list = set.buckets[cy * 8 + cx];
+        for (var i = 0; i < list.length; i++) {
+          var idx = list[i];
+          if (seen[idx]) continue;
+          seen[idx] = 1;
+          var s = set.segs[idx];
+          if (s.maxx >= x0 && s.minx <= x1 && s.maxy >= y0 && s.miny <= y1)
+            out.push(s);
+        }
+      }
+    return out;
+  }
+  function strokeSegs(ctx, segs, project, style, lw) {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    segs.forEach(function (s) {
+      var p = s.pts;
+      var a = project(p[0], p[1]);
+      ctx.moveTo(a[0], a[1]);
+      for (var j = 1; j < p.length / 2; j++) {
+        var b = project(p[j * 2], p[j * 2 + 1]);
+        ctx.lineTo(b[0], b[1]);
+      }
+    });
+    ctx.stroke();
+  }
+  function drawLineSet(ctx, set, project, x0, y0, x1, y1, kind, unit) {
+    // unit = px per master unit in the target space (for line widths)
+    var cand = segsInRect(set, x0, y0, x1, y1);
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    if (kind === "fine") {
+      strokeSegs(ctx, cand, project, "rgba(74,56,38,0.55)",
+        Math.max(0.5, 0.8 * unit));
+      return;
+    }
+    var minors = cand.filter(function (s) { return s.lvl % 50 !== 0; });
+    var idx = cand.filter(function (s) { return s.lvl % 50 === 0; });
+    strokeSegs(ctx, cand, project, "rgba(238,240,226,0.30)",
+      Math.max(0.7, 2.6 * unit));
+    strokeSegs(ctx, minors, project, "rgba(90,70,50,0.75)",
+      Math.max(0.5, 1.0 * unit));
+    strokeSegs(ctx, idx, project, "rgba(61,44,28,0.92)",
+      Math.max(0.7, 1.9 * unit));
+  }
+  function makeLineLayer(kind, zIndex) {
+    var cls = L.GridLayer.extend({
+      createTile: function (coords) {
+        var tile = L.DomUtil.create("canvas", "leaflet-tile");
+        tile.classList.add("vec-line-tile");
+        tile.classList.add("vec-line-" + kind);
+        tile.width = tile.height = 256;
+        var data = vecCache[current];
+        if (!data) return tile;
+        var ctx = tile.getContext("2d");
+        var scale = Math.pow(2, coords.z);   // screen px per master unit
+        var nw = map.unproject(L.point(coords.x * 256, coords.y * 256),
+          coords.z);
+        var ox = nw.lng, oy = -nw.lat, spanU = 256 / scale;
+        var project = function (x, y) {
+          return [(x - ox) * scale, (y - oy) * scale];
+        };
+        // line width unit: at native zoom (coords.z = 0) 1 unit = 1px;
+        // clamp so deep digital zooms keep POC-like constant widths
+        var unit = Math.min(1, scale);
+        drawLineSet(ctx, data[kind], project, ox, oy, ox + spanU,
+          oy + spanU, kind, unit);
+        return tile;
+      }
+    });
+    return new cls({ tileSize: 256, bounds: bounds, zIndex: zIndex,
+      minZoom: -MAXLVL, maxZoom: 2, opacity: 1, pane: "tilePane" });
+  }
+  var baseLineLayer = makeLineLayer("base", 3);
+  var fineLineLayer = makeLineLayer("fine", 5);
+  baseLineLayer.addTo(map);
+  function syncFineLines() {
+    var want = document.getElementById("fine-toggle").checked;
+    var on = map.hasLayer(fineLineLayer);
+    if (want && on) { map.removeLayer(fineLineLayer); fineLineLayer.addTo(map); }
+    else if (want && !on) fineLineLayer.addTo(map);
+    else if (!want && on) map.removeLayer(fineLineLayer);
+  }
+  function refreshLineLayers() {
+    if (map.hasLayer(baseLineLayer)) map.removeLayer(baseLineLayer);
+    baseLineLayer.addTo(map);
+    syncFineLines();
+  }
+
+  /* ---------- drawn labels: place names + contour index labels --
+     Both live on one screen-space overlay canvas (like the sticky
+     grid references), so the text is rendered at screen resolution
+     and never stretches. Index labels are placed greedily along the
+     longest visible 50 m segments, kept apart from each other and
+     from the place labels. */
+  var vecCanvas = L.DomUtil.create("canvas", "vec-labels-canvas");
+  vecCanvas.style.cssText =
+    "position:absolute;left:0;top:0;pointer-events:none;z-index:660;";
+  map.getContainer().appendChild(vecCanvas);
+  function collectIndexLabels(data, project, x0, y0, x1, y1, minLen,
+                              minSep, avoid) {
+    var cand = segsInRect(data.base, x0, y0, x1, y1)
+      .filter(function (s) { return s.lvl % 50 === 0; });
+    var scored = [];
+    cand.forEach(function (s) {
+      var p = s.pts, pts = [], len = 0, prev = null;
+      for (var j = 0; j < p.length / 2; j++) {
+        var q = project(p[j * 2], p[j * 2 + 1]);
+        pts.push(q);
+        if (prev) len += Math.hypot(q[0] - prev[0], q[1] - prev[1]);
+        prev = q;
+      }
+      if (len >= minLen) scored.push({ s: s, pts: pts, len: len });
+    });
+    scored.sort(function (a, b) { return b.len - a.len; });
+    var placed = [], spots = (avoid || []).slice();
+    for (var i = 0; i < scored.length && placed.length < 16; i++) {
+      var pts = scored[i].pts, total = scored[i].len, target = total * 0.55;
+      var acc = 0, at = null, ang = 0;
+      for (var j = 1; j < pts.length; j++) {
+        var d = Math.hypot(pts[j][0] - pts[j - 1][0],
+                           pts[j][1] - pts[j - 1][1]);
+        if (acc + d >= target) {
+          at = pts[j];
+          ang = Math.atan2(pts[j][1] - pts[j - 1][1],
+                           pts[j][0] - pts[j - 1][0]);
+          break;
+        }
+        acc += d;
+      }
+      if (!at) continue;
+      var ok = true;
+      for (var k = 0; k < spots.length; k++)
+        if (Math.hypot(spots[k][0] - at[0], spots[k][1] - at[1]) < minSep) {
+          ok = false; break;
+        }
+      if (!ok) continue;
+      if (ang > Math.PI / 2) ang -= Math.PI;
+      if (ang < -Math.PI / 2) ang += Math.PI;
+      placed.push({ x: at[0], y: at[1], ang: ang, text: scored[i].s.lvl + " m" });
+      spots.push(at);
+    }
+    return placed;
+  }
+  function drawVecLabels() {
+    var size = map.getSize();
+    var dpr = window.devicePixelRatio || 1;
+    var W = Math.round(size.x * dpr), H = Math.round(size.y * dpr);
+    if (vecCanvas.width !== W || vecCanvas.height !== H) {
+      vecCanvas.width = W; vecCanvas.height = H;
+      vecCanvas.style.width = size.x + "px";
+      vecCanvas.style.height = size.y + "px";
+    }
+    var c2 = vecCanvas.getContext("2d");
+    c2.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c2.clearRect(0, 0, size.x, size.y);
+    var lt = document.getElementById("labels-toggle");
+    var avoid = [];
+    if (lt && lt.checked && current === "erangel") {
+      var z = map.getZoom();
+      c2.textAlign = "center"; c2.textBaseline = "middle";
+      POIS.forEach(function (p) {
+        var pt = map.latLngToContainerPoint(L.latLng(-p.y, p.x));
+        if (pt.x < -80 || pt.y < -30 || pt.x > size.x + 80 ||
+            pt.y > size.y + 30) return;
+        var f = p.t === 1 ? 1 : p.t === "R" ? 0.85 : 0.78;
+        var fs = Math.max(10, Math.min(32, 30 * Math.pow(2, z) * f));
+        c2.font = (p.t === 1 ? "700 " : "600 ") + fs +
+          "px 'Segoe UI', Arial, sans-serif";
+        c2.lineWidth = Math.max(3, fs / 5);
+        c2.strokeStyle = "rgba(245,246,238,0.95)";
+        c2.strokeText(p.n, pt.x, pt.y);
+        c2.fillStyle = "#14161a";
+        c2.fillText(p.n, pt.x, pt.y);
+        avoid.push([pt.x, pt.y]);
+      });
+    }
+    var data = vecCache[current];
+    if (data) {
+      var nw = map.containerPointToLatLng(L.point(0, 0));
+      var se = map.containerPointToLatLng(L.point(size.x, size.y));
+      var zScale = Math.pow(2, map.getZoom());  // screen px per unit
+      var project = function (x, y) {           // CRS.Simple is linear
+        return [(x - nw.lng) * zScale, (y - (-nw.lat)) * zScale];
+      };
+      var spots = collectIndexLabels(data, project, nw.lng, -nw.lat,
+        se.lng, -se.lat, 240, 230, avoid);
+      c2.font = "600 12px 'Segoe UI', Arial, sans-serif";
+      c2.textAlign = "center"; c2.textBaseline = "middle";
+      spots.forEach(function (sp) {
+        if (sp.x < 0 || sp.y < 0 || sp.x > size.x || sp.y > size.y) return;
+        c2.save();
+        c2.translate(sp.x, sp.y);
+        c2.rotate(sp.ang);
+        c2.lineWidth = 4;
+        c2.strokeStyle = "rgba(238,240,226,0.92)";
+        c2.strokeText(sp.text, 0, 0);
+        c2.fillStyle = "#3d2c1c";
+        c2.fillText(sp.text, 0, 0);
+        c2.restore();
+      });
+    }
+  }
+  map.on("move zoom resize viewreset", drawVecLabels);
+  loadVectors(current);
 
   /* ---------- grids (canvas GridLayer): 1 km cells + optional 100 m
      minor lines, as on the in-game map. Two independent toggles, each
@@ -167,7 +453,7 @@
       return tile;
     }
   });
-  var grid = new gridLayer({ tileSize: 256, bounds: bounds, zIndex: 4,
+  var grid = new gridLayer({ tileSize: 256, bounds: bounds, zIndex: 6,
     minZoom: -MAXLVL, maxZoom: 2, opacity: 1, pane: "tilePane" });
   grid.addTo(map);
   function refreshGrid() {
@@ -303,11 +589,11 @@
     syncLabels();
   }
   function syncLabels() {
-    var want = labelsToggle.checked && current === "erangel";
-    if (want && !map.hasLayer(labelsLayer)) labelsLayer.addTo(map);
-    if (!want && map.hasLayer(labelsLayer)) map.removeLayer(labelsLayer);
+    // Place labels are drawn on the vector overlay canvas now —
+    // the toggle just enables/disables them there.
     labelsToggle.disabled = current !== "erangel";
     labelsToggle.parentNode.classList.toggle("disabled", current !== "erangel");
+    drawVecLabels();
   }
   labelsToggle.addEventListener("change", syncLabels);
   document.querySelectorAll("input[name='base']").forEach(function (r) {
@@ -318,6 +604,7 @@
   });
   document.getElementById("fine-toggle").addEventListener("change", function (e) {
     if (e.target.checked) fineLayer.addTo(map); else map.removeLayer(fineLayer);
+    syncFineLines();
   });
   document.getElementById("grid-toggle").addEventListener("change", function (e) {
     majorGrid = e.target.checked; refreshGrid();
@@ -376,6 +663,9 @@
       fineLayer = makeFine(current);
       topoLayer.addTo(map);
       if (fineOn) fineLayer.addTo(map);
+      loadVectors(current);
+      refreshLineLayers();
+      drawVecLabels();
       if (current !== "erangel" && baseMode === "art") {
         baseMode = "topo";
         document.querySelector("input[name='base'][value='topo']").checked = true;
@@ -400,6 +690,7 @@
     var old = btn.textContent;
     btn.textContent = "RENDERING…";
     try {
+      var vdata = await loadVectors(current);
       var L = Math.max(0, Math.min(MAXLVL, Math.round(map.getZoom()) + MAXLVL));
       var scale = Math.pow(2, L - MAXLVL);      // global px per latlng unit
       var total = 256 * Math.pow(2, L);
@@ -440,6 +731,18 @@
         await blit("tiles/erangel/art/{z}/{x}/{y}.webp", artOpacity.value / 100);
       if (document.getElementById("fine-toggle").checked)
         await blit("tiles/" + current + "/fine/{z}/{x}/{y}.webp", 0.95);
+      var expProject = function (x, y) {
+        return [x * scale - x0, y * scale - y0];
+      };
+      if (vdata) {
+        // contours drawn as vectors at export resolution — crisp
+        // in the PNG exactly as on screen
+        if (document.getElementById("fine-toggle").checked)
+          drawLineSet(ctx, vdata.fine, expProject, x0 / scale, y0 / scale,
+            x1 / scale, y1 / scale, "fine", scale);
+        drawLineSet(ctx, vdata.base, expProject, x0 / scale, y0 / scale,
+          x1 / scale, y1 / scale, "base", scale);
+      }
       var gridOn = document.getElementById("grid-toggle").checked;
       var grid100On = document.getElementById("grid100-toggle").checked;
       if (grid100On) {
@@ -484,8 +787,44 @@
             ctx.fillText(String(r + 1), 8, ry + 4);
         }
       }
-      if (document.getElementById("labels-toggle").checked && current === "erangel")
-        await blit("tiles/erangel/labels/{z}/{x}/{y}.webp", 1);
+      if (vdata) {
+        var avoidE = [];
+        if (document.getElementById("labels-toggle").checked &&
+            current === "erangel") {
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          POIS.forEach(function (p) {
+            var ex = p.x * scale - x0, ey = p.y * scale - y0;
+            if (ex < -60 || ey < -20 || ex > w + 60 || ey > h + 20) return;
+            var f = p.t === 1 ? 1 : p.t === "R" ? 0.85 : 0.78;
+            var fs = Math.max(8, 30 * scale * f);
+            ctx.font = (p.t === 1 ? "700 " : "600 ") + fs +
+              "px 'Segoe UI', Arial, sans-serif";
+            ctx.lineWidth = Math.max(2, fs / 5);
+            ctx.strokeStyle = "rgba(245,246,238,0.95)";
+            ctx.strokeText(p.n, ex, ey);
+            ctx.fillStyle = "#14161a";
+            ctx.fillText(p.n, ex, ey);
+            avoidE.push([ex, ey]);
+          });
+        }
+        var spotsE = collectIndexLabels(vdata, expProject, x0 / scale,
+          y0 / scale, x1 / scale, y1 / scale, 240 * scale, 230 * scale,
+          avoidE);
+        ctx.font = "600 " + Math.max(9, 13 * scale) +
+          "px 'Segoe UI', Arial, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        spotsE.forEach(function (sp) {
+          ctx.save();
+          ctx.translate(sp.x, sp.y);
+          ctx.rotate(sp.ang);
+          ctx.lineWidth = Math.max(2, 4 * scale);
+          ctx.strokeStyle = "rgba(238,240,226,0.92)";
+          ctx.strokeText(sp.text, 0, 0);
+          ctx.fillStyle = "#3d2c1c";
+          ctx.fillText(sp.text, 0, 0);
+          ctx.restore();
+        });
+      }
       var ctr = fmt(map.getCenter());
       ctx.fillStyle = "rgba(8,10,8,0.72)";
       ctx.fillRect(0, h - 30, w, 30);
