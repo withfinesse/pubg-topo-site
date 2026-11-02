@@ -8,8 +8,8 @@
   var MAPS = {
     erangel: { name: "ERANGEL", stats: "Baltic · 8×8 km · elevation −81.5 m … +248.2 m (Stalber) · 27 place labels on their own layer" },
     miramar: { name: "MIRAMAR", stats: "Desert · 8×8 km · elevation −90.4 m … +256.0 m · source data saturates at the highest plateaus · 28 place labels on their own layer" },
-    taego:   { name: "TAEGO",   stats: "Tiger · 8×8 km · elevation −222.3 m … +181.1 m" },
-    rondo:   { name: "RONDO",   stats: "Neon · 8×8 km · elevation −32.6 m … +244.6 m" }
+    taego:   { name: "TAEGO",   stats: "Tiger · 8×8 km · elevation −222.3 m … +181.1 m · 19 place labels on their own layer" },
+    rondo:   { name: "RONDO",   stats: "Neon · 8×8 km · elevation −32.6 m … +244.6 m · 25 place labels on their own layer" }
   };
   var current = "erangel";
   var baseMode = "topo";
@@ -115,7 +115,51 @@
 {n:"Puerto Paraíso",t:2,x:3127.0,y:3133.5},
 {n:"Resort",t:2,x:2299.5,y:3315.5},
 {n:"Prison",t:2,x:617.5,y:3624.0},
-{n:"Partona",t:2,x:1728.0,y:3698.0}]
+{n:"Partona",t:2,x:1728.0,y:3698.0}],
+    taego: [{n:"Army Base",t:2,x:1923.0,y:518.0},
+{n:"Shipyard",t:2,x:2883.0,y:748.0},
+{n:"Wol Song",t:1,x:823.5,y:818.5},
+{n:"Hae Moo Sa",t:2,x:547.5,y:1220.0},
+{n:"Yong Cheon",t:1,x:2309.5,y:1231.0},
+{n:"Go Dok",t:1,x:1284.0,y:1231.5},
+{n:"Airport",t:2,x:3679.5,y:1580.0},
+{n:"Terminal",t:2,x:2415.0,y:1820.5},
+{n:"Palace",t:2,x:1532.0,y:1823.5},
+{n:"Fishing Camp",t:2,x:1296.5,y:2131.0},
+{n:"Ha Po",t:2,x:384.0,y:2226.5},
+{n:"Kang Neung",t:1,x:3252.5,y:2267.5},
+{n:"Ho San",t:1,x:1748.0,y:2560.0},
+{n:"Buk San Sa",t:2,x:2533.0,y:2571.5},
+{n:"Oh Hyang",t:2,x:2910.5,y:2998.0},
+{n:"Ho San Prison",t:2,x:950.5,y:3048.0},
+{n:"School",t:2,x:1579.0,y:3219.5},
+{n:"Song Am",t:1,x:2090.0,y:3380.5},
+{n:"Hospital",t:2,x:2788.0,y:3428.5}],
+    rondo: [{n:"Nan Chuan",t:2,x:1205.0,y:365.0},
+{n:"Rai An",t:2,x:1948.5,y:382.0},
+{n:"Kun Xia",t:2,x:2686.0,y:422.5},
+{n:"Min Hu",t:2,x:573.5,y:434.5},
+{n:"Hemay Town",t:1,x:3497.5,y:683.5},
+{n:"Mu Ho Pan",t:2,x:2944.5,y:710.5},
+{n:"Bei Li",t:2,x:624.5,y:979.5},
+{n:"Bamboo",t:2,x:1904.5,y:1283.5},
+{n:"Stadium",t:1,x:1502.0,y:1305.0},
+{n:"Lo Hua Xing",t:2,x:2991.0,y:1500.0},
+{n:"Jao Tin",t:2,x:871.0,y:1565.5},
+{n:"Test Track",t:2,x:2235.0,y:1638.5},
+{n:"Mey Ran",t:1,x:3246.0,y:1652.5},
+{n:"Neox Factory",t:1,x:2548.0,y:1965.0},
+{n:"Yu Lin",t:2,x:1528.5,y:2144.0},
+{n:"Yun Gu",t:2,x:3205.0,y:2198.5},
+{n:"Fong Tun",t:1,x:555.5,y:2469.0},
+{n:"Dan Ching",t:2,x:2484.5,y:2695.5},
+{n:"Jadena City",t:1,x:3572.0,y:2786.5},
+{n:"Tu Ling",t:2,x:2822.5,y:2772.0},
+{n:"Lan Po",t:2,x:719.5,y:2976.0},
+{n:"Hung Shan",t:2,x:1856.0,y:3131.0},
+{n:"Rin Jiang",t:2,x:1407.0,y:3445.5},
+{n:"Tin Long Garden",t:2,x:2503.0,y:3519.0},
+{n:"Long Ho",t:2,x:777.5,y:3598.0}]
   };
   function curPois() { return POIS_BY_MAP[current] || null; }
   var vecCache = {}, vecPromise = {};
@@ -162,7 +206,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=13")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=14")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
