@@ -210,6 +210,12 @@
     // Each label sits at the centre of its cell's VISIBLE span, so
     // zoomed inside a single cell (centre off-screen) its letter and
     // number still show — that's the whole point of sticky labels.
+    // Row numbers step right past the layer panel when their row
+    // falls inside the panel's span, so they never hide behind it.
+    var pel = document.getElementById("panel").getBoundingClientRect();
+    var mr = map.getContainer().getBoundingClientRect();
+    var pTop = pel.top - mr.top, pBot = pel.bottom - mr.top,
+        pRight = pel.right - mr.left;
     for (var k = 0; k < 8; k++) {
       var xL = map.latLngToContainerPoint(L.latLng(0, k * CELL)).x;
       var xR = map.latLngToContainerPoint(L.latLng(0, (k + 1) * CELL)).x;
@@ -221,9 +227,11 @@
       var yT = map.latLngToContainerPoint(L.latLng(-k * CELL, 0)).y;
       var yB = map.latLngToContainerPoint(L.latLng(-(k + 1) * CELL, 0)).y;
       if (yB > 0 && yT < size.y) {
+        var cy = (Math.max(yT, 0) + Math.min(yB, size.y)) / 2;
+        var nx = (pel.width > 0 && cy > pTop && cy < pBot)
+          ? Math.min(size.x - 14, pRight + 6) : 6;
         c2.textAlign = "left";
-        c2.fillText(String(k + 1), 6,
-          (Math.max(yT, 0) + Math.min(yB, size.y)) / 2 + 4);
+        c2.fillText(String(k + 1), nx, cy + 4);
       }
     }
     c2.shadowBlur = 0;
