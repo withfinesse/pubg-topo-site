@@ -7,7 +7,7 @@
   var G = 4096, SPAN = 8.16, MAXLVL = 4, CELL = G / 8; // 512 units = 1.02 km
   var MAPS = {
     erangel: { name: "ERANGEL", stats: "Baltic · 8×8 km · elevation −81.5 m … +248.2 m (Stalber) · 27 place labels on their own layer" },
-    miramar: { name: "MIRAMAR", stats: "Desert · 8×8 km · elevation −90.4 m … +256.0 m · source data saturates at the highest plateaus" },
+    miramar: { name: "MIRAMAR", stats: "Desert · 8×8 km · elevation −90.4 m … +256.0 m · source data saturates at the highest plateaus · 28 place labels on their own layer" },
     taego:   { name: "TAEGO",   stats: "Tiger · 8×8 km · elevation −222.3 m … +181.1 m" },
     rondo:   { name: "RONDO",   stats: "Neon · 8×8 km · elevation −32.6 m … +244.6 m" }
   };
@@ -86,7 +86,38 @@
      tiles. Data is bucketed into the 8x8 grid cells for lookup.
      Line layers are canvas GridLayers and obey the same rule as
      the grid: createTile declares only (coords), never calls done. */
-  var POIS = [{n:"Zharki",t:1,x:539.1,y:645.5},{n:"Severny",t:1,x:1938.1,y:605.4},{n:"Stalber",t:1,x:2866.7,y:654.1},{n:"Kameshki",t:1,x:3343.1,y:517.0},{n:"Shooting Range",t:2,x:1704.7,y:914.1},{n:"Georgopol",t:1,x:925.1,y:1274.0},{n:"Yasnaya Polyana",t:1,x:2770.8,y:1173.1},{n:"Rozhok",t:2,x:2012.9,y:1434.6},{n:"Boatyard",t:2,x:1781.5,y:1581.7},{n:"Hospital",t:2,x:769.0,y:1623.3},{n:"Mansion",t:2,x:3117.7,y:1559.6},{n:"Lipovka",t:1,x:3556.9,y:1645.9},{n:"School",t:2,x:2085.6,y:1671.5},{n:"Ruins",t:2,x:1584.7,y:1685.6},{n:"Gatka",t:1,x:1090.3,y:1929.5},{n:"Prison",t:2,x:3134.7,y:1850.2},{n:"Shelter",t:2,x:2856.2,y:1975.7},{n:"Pochinki",t:1,x:1830.1,y:2065.6},{n:"Mylta Power",t:2,x:3649.3,y:2211.1},{n:"Farm",t:2,x:2679.0,y:2282.4},{n:"Mylta",t:1,x:3080.5,y:2344.7},{n:"Quarry",t:2,x:909.1,y:2718.6},{n:"Ferry Pier",t:2,x:1423.6,y:2898.8},{n:"Sosnovka Island",t:"R",x:2258.3,y:3009.3},{n:"Primorsk",t:1,x:812.2,y:3028.8},{n:"Novorepnoye",t:1,x:3131.7,y:3062.0},{n:"Sosnovka Military Base",t:1,x:2249.8,y:3299.4}];
+  var POIS_BY_MAP = {
+    erangel: [{n:"Zharki",t:1,x:539.1,y:645.5},{n:"Severny",t:1,x:1938.1,y:605.4},{n:"Stalber",t:1,x:2866.7,y:654.1},{n:"Kameshki",t:1,x:3343.1,y:517.0},{n:"Shooting Range",t:2,x:1704.7,y:914.1},{n:"Georgopol",t:1,x:925.1,y:1274.0},{n:"Yasnaya Polyana",t:1,x:2770.8,y:1173.1},{n:"Rozhok",t:2,x:2012.9,y:1434.6},{n:"Boatyard",t:2,x:1781.5,y:1581.7},{n:"Hospital",t:2,x:769.0,y:1623.3},{n:"Mansion",t:2,x:3117.7,y:1559.6},{n:"Lipovka",t:1,x:3556.9,y:1645.9},{n:"School",t:2,x:2085.6,y:1671.5},{n:"Ruins",t:2,x:1584.7,y:1685.6},{n:"Gatka",t:1,x:1090.3,y:1929.5},{n:"Prison",t:2,x:3134.7,y:1850.2},{n:"Shelter",t:2,x:2856.2,y:1975.7},{n:"Pochinki",t:1,x:1830.1,y:2065.6},{n:"Mylta Power",t:2,x:3649.3,y:2211.1},{n:"Farm",t:2,x:2679.0,y:2282.4},{n:"Mylta",t:1,x:3080.5,y:2344.7},{n:"Quarry",t:2,x:909.1,y:2718.6},{n:"Ferry Pier",t:2,x:1423.6,y:2898.8},{n:"Sosnovka Island",t:"R",x:2258.3,y:3009.3},{n:"Primorsk",t:1,x:812.2,y:3028.8},{n:"Novorepnoye",t:1,x:3131.7,y:3062.0},{n:"Sosnovka Military Base",t:1,x:2249.8,y:3299.4}],
+    miramar: [{n:"Oasis",t:2,x:1885.5,y:400.0},
+{n:"Campo Militar",t:2,x:2936.0,y:457.5},
+{n:"Tierra Bronca",t:2,x:3303.5,y:606.0},
+{n:"La Cobrería",t:2,x:1267.5,y:715.0},
+{n:"Cruz del Valle",t:2,x:2763.5,y:749.0},
+{n:"Alcántara",t:2,x:433.0,y:992.0},
+{n:"Water Treatment",t:2,x:2158.5,y:1046.5},
+{n:"Crater Fields",t:2,x:1047.0,y:1050.0},
+{n:"El Azahar",t:2,x:3225.5,y:1286.0},
+{n:"El Pozo",t:1,x:860.5,y:1415.0},
+{n:"San Martín",t:1,x:1924.0,y:1474.5},
+{n:"Hacienda del Patrón",t:2,x:2186.0,y:1474.5},
+{n:"Truck Stop",t:2,x:3044.5,y:1695.5},
+{n:"Power Grid",t:2,x:1613.0,y:1844.5},
+{n:"Graveyard",t:2,x:2257.0,y:1920.5},
+{n:"Minas Generales",t:2,x:2603.0,y:1917.5},
+{n:"Monte Nuevo",t:2,x:1056.0,y:1972.5},
+{n:"Cantera",t:2,x:2545.0,y:2100.0},
+{n:"Pecado",t:2,x:1862.5,y:2158.0},
+{n:"Impala",t:2,x:3171.5,y:2322.0},
+{n:"Brick Yard",t:2,x:963.0,y:2359.0},
+{n:"Chumacera",t:2,x:1393.0,y:2573.5},
+{n:"Los Leones",t:1,x:2392.5,y:2681.0},
+{n:"Valle del Mar",t:2,x:738.0,y:3086.5},
+{n:"Puerto Paraíso",t:2,x:3127.0,y:3133.5},
+{n:"Resort",t:2,x:2299.5,y:3315.5},
+{n:"Prison",t:2,x:617.5,y:3624.0},
+{n:"Partona",t:2,x:1728.0,y:3698.0}]
+  };
+  function curPois() { return POIS_BY_MAP[current] || null; }
   var vecCache = {}, vecPromise = {};
   function bucketize(segs) {
     var buckets = [];
@@ -131,7 +162,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=12")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=13")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -426,10 +457,11 @@
     c2.clearRect(0, 0, size.x, size.y);
     var lt = document.getElementById("labels-toggle");
     var avoid = [];
-    if (lt && lt.checked && current === "erangel") {
+    var pois = curPois();
+    if (lt && lt.checked && pois) {
       var z = map.getZoom();
       c2.textAlign = "center"; c2.textBaseline = "middle";
-      POIS.forEach(function (p) {
+      pois.forEach(function (p) {
         var pt = map.latLngToContainerPoint(L.latLng(-p.y, p.x));
         if (pt.x < -80 || pt.y < -30 || pt.x > size.x + 80 ||
             pt.y > size.y + 30) return;
@@ -709,9 +741,10 @@
     artNote.textContent = current === "erangel"
       ? "Art overlay: topo drawn over the official map art. Slider crossfades it against the topo sheet."
       : "Art overlay: Erangel only (official art alignment is verified for Erangel).";
-    labelsNote.textContent = current === "erangel"
-      ? "Place labels: the 27 Erangel POIs, on their own layer above everything else."
-      : "Place labels: Erangel only for now.";
+    var poisNow = curPois();
+    labelsNote.textContent = poisNow
+      ? "Place labels: " + poisNow.length + " named locations from the official map art, on their own layer above everything else."
+      : "Place labels: not available on this map yet.";
     document.getElementById("map-name").textContent = MAPS[current].name;
     document.getElementById("map-stats").textContent = MAPS[current].stats;
     syncLabels();
@@ -719,8 +752,8 @@
   function syncLabels() {
     // Place labels are drawn on the vector overlay canvas now —
     // the toggle just enables/disables them there.
-    labelsToggle.disabled = current !== "erangel";
-    labelsToggle.parentNode.classList.toggle("disabled", current !== "erangel");
+    labelsToggle.disabled = !curPois();
+    labelsToggle.parentNode.classList.toggle("disabled", !curPois());
     drawVecLabels(true);
   }
   labelsToggle.addEventListener("change", syncLabels);
@@ -917,10 +950,11 @@
       }
       if (vdata) {
         var avoidE = [];
+        var poisE = curPois();
         if (document.getElementById("labels-toggle").checked &&
-            current === "erangel") {
+            poisE) {
           ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          POIS.forEach(function (p) {
+          poisE.forEach(function (p) {
             var ex = p.x * scale - x0, ey = p.y * scale - y0;
             if (ex < -60 || ey < -20 || ex > w + 60 || ey > h + 20) return;
             var f = p.t === 1 ? 1 : p.t === "R" ? 0.85 : 0.78;
