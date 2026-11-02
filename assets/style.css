@@ -144,3 +144,7 @@ body {
 .gridstyle { display: flex; align-items: center; gap: 8px; margin: 1px 0 5px 26px; }
 .gridstyle input[type="color"] { width: 26px; height: 18px; padding: 0; border: 1px solid var(--muted); background: none; cursor: pointer; flex: none; }
 .gridstyle input[type="range"] { flex: 1; accent-color: var(--accent); }
+
+/* Line overlays fade out during a zoom gesture and back in over
+   the gesture-end redraw (see setLineOpacity in app.js). */
+.vec-line-canvas { transition: opacity .13s ease-out; }

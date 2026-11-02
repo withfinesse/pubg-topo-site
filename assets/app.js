@@ -209,7 +209,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=15")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=16")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -399,6 +399,25 @@
     else baseLineLayer._reset();
     syncFineLines();
   }
+
+  /* Zoom feel: a line canvas is drawn for the view at gesture end,
+     so during a zoom the pane transform stretches it — the old
+     lines hang there, scaled, until the zoom stops and the redraw
+     snaps in. Fade the line layers out at zoomstart and back in
+     once the zoomend redraw has landed: the shading tiles carry
+     the terrain through the gesture, and the place labels live on
+     a screen-space canvas, so they stay up and crisp throughout.
+     Pure pans keep the lines: a pan transform is a translation,
+     so they stay registered. */
+  function setLineOpacity(v) {
+    [baseLineLayer, fineLineLayer].forEach(function (l) {
+      if (l._canvas) l._canvas.style.opacity = v;
+    });
+  }
+  map.on("zoomstart", function () { setLineOpacity("0"); });
+  map.on("zoomend", function () {
+    requestAnimationFrame(function () { setLineOpacity("1"); });
+  });
 
   /* ---------- drawn labels: place names + contour index labels --
      Both live on one screen-space overlay canvas (like the sticky
