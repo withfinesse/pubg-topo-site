@@ -132,6 +132,7 @@ body {
   font-size: 10.5px; color: var(--muted); z-index: 1200;
 }
 #footer a { color: var(--accent); text-decoration: none; white-space: nowrap; }
+#footer .foot-links { display: flex; gap: 16px; }
 #footer a:hover { text-decoration: underline; }
 @media (max-width: 760px) {
   .brand-sub { display: none; }
