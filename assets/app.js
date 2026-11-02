@@ -131,7 +131,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=11")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=12")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -144,7 +144,7 @@
       })
       .then(function (raw) {
         vecCache[id] = parseVectors(raw);
-        if (id === current) { refreshLineLayers(); drawVecLabels(); }
+        if (id === current) { refreshLineLayers(); drawVecLabels(true); }
         return vecCache[id];
       })
       .catch(function () { return null; });  // shading still works
@@ -170,80 +170,155 @@
       }
     return out;
   }
-  function strokeSegs(ctx, segs, project, style, lw) {
+  function strokeSegs(ctx, segs, project, style, lw, clip) {
     ctx.strokeStyle = style;
     ctx.lineWidth = lw;
     ctx.beginPath();
     segs.forEach(function (s) {
-      var p = s.pts;
-      var a = project(p[0], p[1]);
-      ctx.moveTo(a[0], a[1]);
-      for (var j = 1; j < p.length / 2; j++) {
-        var b = project(p[j * 2], p[j * 2 + 1]);
-        ctx.lineTo(b[0], b[1]);
+      var p = s.pts, n = p.length / 2;
+      if (!clip) {
+        var a = project(p[0], p[1]);
+        ctx.moveTo(a[0], a[1]);
+        for (var j = 1; j < n; j++) {
+          var b = project(p[j * 2], p[j * 2 + 1]);
+          ctx.lineTo(b[0], b[1]);
+        }
+        return;
+      }
+      // Clipped per point-pair (Liang-Barsky against the tile rect
+      // plus margin): pairs outside cost a few comparisons instead
+      // of a path vertex, and a long simplified span whose endpoints
+      // are both outside still draws its crossing piece.
+      var xMin = -clip.m, xMax = clip.w + clip.m;
+      var yMin = -clip.m, yMax = clip.h + clip.m;
+      var prev = project(p[0], p[1]);
+      for (var j2 = 1; j2 < n; j2++) {
+        var q = project(p[j2 * 2], p[j2 * 2 + 1]);
+        var dx = q[0] - prev[0], dy = q[1] - prev[1];
+        var t0 = 0, t1 = 1, ok = true;
+        var pp = [-dx, dx, -dy, dy];
+        var qq = [prev[0] - xMin, xMax - prev[0],
+                  prev[1] - yMin, yMax - prev[1]];
+        for (var e = 0; e < 4; e++) {
+          if (pp[e] === 0) { if (qq[e] < 0) { ok = false; break; } }
+          else {
+            var r = qq[e] / pp[e];
+            if (pp[e] < 0) { if (r > t1) { ok = false; break; } if (r > t0) t0 = r; }
+            else { if (r < t0) { ok = false; break; } if (r < t1) t1 = r; }
+          }
+        }
+        if (ok) {
+          ctx.moveTo(prev[0] + t0 * dx, prev[1] + t0 * dy);
+          ctx.lineTo(prev[0] + t1 * dx, prev[1] + t1 * dy);
+        }
+        prev = q;
       }
     });
     ctx.stroke();
   }
-  function drawLineSet(ctx, set, project, x0, y0, x1, y1, kind, unit) {
+  function drawLineSet(ctx, set, project, x0, y0, x1, y1, kind, unit, clip) {
     // unit = px per master unit in the target space (for line widths)
     var cand = segsInRect(set, x0, y0, x1, y1);
     ctx.lineJoin = "round"; ctx.lineCap = "round";
     if (kind === "fine") {
       strokeSegs(ctx, cand, project, "rgba(74,56,38,0.55)",
-        Math.max(0.5, 0.8 * unit));
+        Math.max(0.5, 0.8 * unit), clip);
       return;
     }
     var minors = cand.filter(function (s) { return s.lvl % 50 !== 0; });
     var idx = cand.filter(function (s) { return s.lvl % 50 === 0; });
-    strokeSegs(ctx, cand, project, "rgba(238,240,226,0.30)",
-      Math.max(0.7, 2.6 * unit));
+    if (unit > 0.3)  // halo is sub-pixel at low zoom — skip the pass
+      strokeSegs(ctx, cand, project, "rgba(238,240,226,0.30)",
+        Math.max(0.7, 2.6 * unit), clip);
     strokeSegs(ctx, minors, project, "rgba(90,70,50,0.75)",
-      Math.max(0.5, 1.0 * unit));
+      Math.max(0.5, 1.0 * unit), clip);
     strokeSegs(ctx, idx, project, "rgba(61,44,28,0.92)",
-      Math.max(0.7, 1.9 * unit));
+      Math.max(0.7, 1.9 * unit), clip);
   }
-  function makeLineLayer(kind, zIndex) {
-    var cls = L.GridLayer.extend({
-      createTile: function (coords) {
-        var tile = L.DomUtil.create("canvas", "leaflet-tile");
-        tile.classList.add("vec-line-tile");
-        tile.classList.add("vec-line-" + kind);
-        tile.width = tile.height = 256;
-        var data = vecCache[current];
-        if (!data) return tile;
-        var ctx = tile.getContext("2d");
-        var scale = Math.pow(2, coords.z);   // screen px per master unit
-        var nw = map.unproject(L.point(coords.x * 256, coords.y * 256),
-          coords.z);
-        var ox = nw.lng, oy = -nw.lat, spanU = 256 / scale;
-        var project = function (x, y) {
-          return [(x - ox) * scale, (y - oy) * scale];
-        };
-        // line width unit: at native zoom (coords.z = 0) 1 unit = 1px;
-        // clamp so deep digital zooms keep POC-like constant widths
-        var unit = Math.min(1, scale);
-        drawLineSet(ctx, data[kind], project, ox, oy, ox + spanU,
-          oy + spanU, kind, unit);
-        return tile;
-      }
-    });
-    return new cls({ tileSize: 256, bounds: bounds, zIndex: zIndex,
-      minZoom: -MAXLVL, maxZoom: 2, opacity: 1, pane: "tilePane" });
-  }
-  var baseLineLayer = makeLineLayer("base", 3);
-  var fineLineLayer = makeLineLayer("fine", 5);
-  baseLineLayer.addTo(map);
+  /* Line overlays: ONE full-screen canvas per line set, living in
+     its own pane so it interleaves with the raster stack. During a
+     pan/zoom gesture the pane transform carries the canvas (it
+     scales like the raster tiles do — the pre-vector feel); at
+     gesture end it redraws once, crisp, for the new view. The
+     ?v=10 tile version redrew ~40 canvas tiles at every zoom level
+     crossed, which is what made zooming feel heavy. Panes: raster
+     tilePane (200) < base lines (205) < fine lines (206) < grid
+     (210) — both line canvases sit above the fine shading rather
+     than base under it; the shading is translucent relief tint, so
+     lines over it read cleaner anyway. */
+  map.createPane("vecBasePane");
+  map.getPane("vecBasePane").style.zIndex = 205;
+  map.createPane("vecFinePane");
+  map.getPane("vecFinePane").style.zIndex = 206;
+  map.createPane("gridPane");
+  map.getPane("gridPane").style.zIndex = 210;
+  var LineOverlay = L.Layer.extend({
+    initialize: function (opts) { this._kind = opts.kind; },
+    onAdd: function (map) {
+      this._canvas = L.DomUtil.create("canvas", "vec-line-canvas");
+      this._canvas.dataset.kind = this._kind;
+      this._canvas.style.cssText =
+        "position:absolute;left:0;top:0;pointer-events:none;";
+      this._ctx = this._canvas.getContext("2d");
+      map.getPane(this._kind === "base" ? "vecBasePane" : "vecFinePane")
+        .appendChild(this._canvas);
+      map.on("moveend zoomend resize viewreset", this._reset, this);
+      this._reset();
+    },
+    onRemove: function (map) {
+      map.off("moveend zoomend resize viewreset", this._reset, this);
+      L.DomUtil.remove(this._canvas);
+      this._canvas = null;
+      this._ctx = null;
+    },
+    _reset: function () {
+      var map = this._map, c = this._canvas;
+      if (!map || !c) return;
+      var size = map.getSize();
+      var pad = 256;
+      var origin = map.containerPointToLayerPoint(L.point(-pad, -pad));
+      L.DomUtil.setPosition(c, origin);
+      var w = size.x + pad * 2, h = size.y + pad * 2;
+      if (c.width !== w) c.width = w;
+      if (c.height !== h) c.height = h;
+      var ctx = this._ctx;
+      ctx.clearRect(0, 0, w, h);
+      var data = vecCache[current];
+      if (!data) return;
+      // 2 m lines are sub-pixel mush below zoom -1; the fine
+      // shading raster still carries the micro-relief there.
+      if (this._kind === "fine" && map.getZoom() < -1) return;
+      var scale = Math.pow(2, map.getZoom());
+      // Layer points are relative to the pixel origin, not the
+      // global projected frame — master coords anchor at
+      // (layer point + pixel origin) / scale. Forgetting the pixel
+      // origin shifted the drawing a whole viewport away, where
+      // the tile clip discarded it (empty canvas at deep zoom).
+      var pix = map.getPixelOrigin();
+      var gx = origin.x + pix.x, gy = origin.y + pix.y;
+      var x0 = gx / scale, y0 = gy / scale;
+      var project = function (x, y) {
+        return [x * scale - gx, y * scale - gy];
+      };
+      drawLineSet(ctx, data[this._kind], project, x0, y0,
+        x0 + w / scale, y0 + h / scale, this._kind,
+        Math.min(1, scale), { w: w, h: h, m: 8 });
+    }
+  });
+  var baseLineLayer = new LineOverlay({ kind: "base" });
+  var fineLineLayer = new LineOverlay({ kind: "fine" });
   function syncFineLines() {
-    var want = document.getElementById("fine-toggle").checked;
+    var want = document.getElementById("fine-toggle").checked &&
+      !!vecCache[current];
     var on = map.hasLayer(fineLineLayer);
-    if (want && on) { map.removeLayer(fineLineLayer); fineLineLayer.addTo(map); }
-    else if (want && !on) fineLineLayer.addTo(map);
+    if (want && !on) fineLineLayer.addTo(map);
     else if (!want && on) map.removeLayer(fineLineLayer);
+    else if (want && on) fineLineLayer._reset();
   }
   function refreshLineLayers() {
-    if (map.hasLayer(baseLineLayer)) map.removeLayer(baseLineLayer);
-    baseLineLayer.addTo(map);
+    if (!vecCache[current]) return;
+    if (!map.hasLayer(baseLineLayer)) baseLineLayer.addTo(map);
+    else baseLineLayer._reset();
     syncFineLines();
   }
 
@@ -337,7 +412,7 @@
     }
     return placed;
   }
-  function drawVecLabels() {
+  function drawVecLabels(full) {
     var size = map.getSize();
     var dpr = window.devicePixelRatio || 1;
     var W = Math.round(size.x * dpr), H = Math.round(size.y * dpr);
@@ -371,7 +446,7 @@
       });
     }
     var data = vecCache[current];
-    if (data) {
+    if (data && full) {
       var nw = map.containerPointToLatLng(L.point(0, 0));
       var se = map.containerPointToLatLng(L.point(size.x, size.y));
       var zScale = Math.pow(2, map.getZoom());  // screen px per unit
@@ -396,7 +471,25 @@
       });
     }
   }
-  map.on("move zoom resize viewreset", drawVecLabels);
+  // During a pan/zoom gesture only the place labels redraw (cheap,
+  // rAF-coalesced); the index-label placement pass runs once when
+  // the gesture ends. Recomputing it on every move event was the
+  // other half of the ?v=10 zoom lag.
+  var vecRaf = 0, vecFullWanted = false;
+  function scheduleVecLabels(full) {
+    if (full) vecFullWanted = true;
+    if (vecRaf) return;
+    vecRaf = requestAnimationFrame(function () {
+      vecRaf = 0;
+      var f = vecFullWanted;
+      vecFullWanted = false;
+      drawVecLabels(f);
+    });
+  }
+  map.on("move zoom", function () { scheduleVecLabels(false); });
+  map.on("moveend zoomend resize viewreset", function () {
+    scheduleVecLabels(true);
+  });
   loadVectors(current);
 
   /* ---------- grids (canvas GridLayer): 1 km cells + optional 100 m
@@ -489,7 +582,7 @@
     }
   });
   var grid = new gridLayer({ tileSize: 256, bounds: bounds, zIndex: 6,
-    minZoom: -MAXLVL, maxZoom: 2, opacity: 1, pane: "tilePane" });
+    minZoom: -MAXLVL, maxZoom: 2, opacity: 1, pane: "gridPane" });
   grid.addTo(map);
   function refreshGrid() {
     var want = majorGrid || minorGrid;
@@ -628,7 +721,7 @@
     // the toggle just enables/disables them there.
     labelsToggle.disabled = current !== "erangel";
     labelsToggle.parentNode.classList.toggle("disabled", current !== "erangel");
-    drawVecLabels();
+    drawVecLabels(true);
   }
   labelsToggle.addEventListener("change", syncLabels);
   document.querySelectorAll("input[name='base']").forEach(function (r) {
@@ -700,7 +793,7 @@
       if (fineOn) fineLayer.addTo(map);
       loadVectors(current);
       refreshLineLayers();
-      drawVecLabels();
+      drawVecLabels(true);
       if (current !== "erangel" && baseMode === "art") {
         baseMode = "topo";
         document.querySelector("input[name='base'][value='topo']").checked = true;
