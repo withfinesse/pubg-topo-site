@@ -160,21 +160,9 @@
           if (sy >= 0 && sy <= 256) { ctx.moveTo(0, sy); ctx.lineTo(256, sy); }
         }
         ctx.stroke();
-        // edge labels: column letters along the north edge, row numbers west
-        if (coords.y === 0) {
-          ctx.textAlign = "center";
-          for (k = 0; k < 8; k++) {
-            sx = ((k + 0.5) * CELL - nw.lng) * scale;
-            if (sx > 0 && sx < 256) ctx.fillText("ABCDEFGH"[k], sx, 14);
-          }
-        }
-        if (coords.x === 0) {
-          ctx.textAlign = "left";
-          for (k = 0; k < 8; k++) {
-            sy = (nw.lat - (-(k + 0.5) * CELL)) * scale;
-            if (sy > 0 && sy < 256) ctx.fillText(String(k + 1), 5, sy + 4);
-          }
-        }
+        // (column/row reference labels live on the sticky screen-edge
+        // overlay below — painted here they'd scroll away with the
+        // map's edges when zoomed in.)
       }
       return tile;
     }
@@ -188,7 +176,60 @@
     if (want && on) { map.removeLayer(grid); grid.addTo(map); }
     else if (want && !on) grid.addTo(map);
     else if (!want && on) map.removeLayer(grid);
+    drawGridLabels();
   }
+
+  /* ---------- sticky grid reference labels ----------
+     Column letters + row numbers for the 1 km grid, pinned to the
+     viewport's top/left edges on their own overlay canvas, so the
+     reference survives zooming and panning (painted on the map's
+     edge tiles, they scrolled away with the edges). Follows the
+     grid's colour setting; hidden when the 1 km grid is off. */
+  var labelCanvas = L.DomUtil.create("canvas", "grid-labels-canvas");
+  labelCanvas.style.cssText =
+    "position:absolute;left:0;top:0;pointer-events:none;z-index:650;";
+  map.getContainer().appendChild(labelCanvas);
+  function drawGridLabels() {
+    var size = map.getSize();
+    var dpr = window.devicePixelRatio || 1;
+    var W = Math.round(size.x * dpr), H = Math.round(size.y * dpr);
+    if (labelCanvas.width !== W || labelCanvas.height !== H) {
+      labelCanvas.width = W; labelCanvas.height = H;
+      labelCanvas.style.width = size.x + "px";
+      labelCanvas.style.height = size.y + "px";
+    }
+    var c2 = labelCanvas.getContext("2d");
+    c2.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c2.clearRect(0, 0, size.x, size.y);
+    if (!majorGrid) return;
+    var dark = root.getAttribute("data-theme") !== "light";
+    c2.font = "600 11px 'Segoe UI', Arial, sans-serif";
+    c2.fillStyle = gridRgba(gridStyle.major.color, 0.95);
+    c2.shadowColor = dark ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.75)";
+    c2.shadowBlur = 3;
+    // Each label sits at the centre of its cell's VISIBLE span, so
+    // zoomed inside a single cell (centre off-screen) its letter and
+    // number still show — that's the whole point of sticky labels.
+    for (var k = 0; k < 8; k++) {
+      var xL = map.latLngToContainerPoint(L.latLng(0, k * CELL)).x;
+      var xR = map.latLngToContainerPoint(L.latLng(0, (k + 1) * CELL)).x;
+      if (xR > 0 && xL < size.x) {
+        c2.textAlign = "center";
+        c2.fillText("ABCDEFGH"[k],
+          (Math.max(xL, 0) + Math.min(xR, size.x)) / 2, 14);
+      }
+      var yT = map.latLngToContainerPoint(L.latLng(-k * CELL, 0)).y;
+      var yB = map.latLngToContainerPoint(L.latLng(-(k + 1) * CELL, 0)).y;
+      if (yB > 0 && yT < size.y) {
+        c2.textAlign = "left";
+        c2.fillText(String(k + 1), 6,
+          (Math.max(yT, 0) + Math.min(yB, size.y)) / 2 + 4);
+      }
+    }
+    c2.shadowBlur = 0;
+  }
+  map.on("move zoom resize viewreset", drawGridLabels);
+  drawGridLabels();
 
   /* ---------- readout + scale bar ---------- */
   var readout = document.getElementById("readout");
@@ -419,14 +460,21 @@
         ctx.stroke();
         ctx.fillStyle = gridRgba(gridStyle.major.color, 0.9);
         ctx.font = "600 " + Math.max(11, 26 * scale) + "px 'Segoe UI', Arial, sans-serif";
+        // reference letters/numbers along the export's own edges,
+        // for whichever cells the export spans (matches the viewer's
+        // sticky screen-edge labels)
         ctx.textAlign = "center";
-        if (y0 === 0)
-          for (var c = 0; c < 8; c++)
-            ctx.fillText("ABCDEFGH"[c], (c + 0.5) * CELL * scale - x0, 30 * scale + 12);
+        for (var c = 0; c < 8; c++) {
+          var lx = (c + 0.5) * CELL * scale - x0;
+          if (lx > 0 && lx < w)
+            ctx.fillText("ABCDEFGH"[c], lx, 30 * scale + 12);
+        }
         ctx.textAlign = "left";
-        if (x0 === 0)
-          for (var r = 0; r < 8; r++)
-            ctx.fillText(String(r + 1), 8, (r + 0.5) * CELL * scale - y0 + 4);
+        for (var r = 0; r < 8; r++) {
+          var ry = (r + 0.5) * CELL * scale - y0;
+          if (ry > 0 && ry < h)
+            ctx.fillText(String(r + 1), 8, ry + 4);
+        }
       }
       if (document.getElementById("labels-toggle").checked && current === "erangel")
         await blit("tiles/erangel/labels/{z}/{x}/{y}.webp", 1);
