@@ -259,7 +259,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=22")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=23")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -465,6 +465,8 @@
      + height labels) fade with the lines (Joel's call, 2026-11-03):
      they belong to the lines, so all of the annotation leaves and
      returns together instead of floating over the bare shading.
+     The A–H/1–8 grid references fade too (same call, later that
+     day) — during a zoom, nothing drawn stays behind.
      Pure pans keep everything: a pan transform is a translation,
      so it all stays registered. */
   function setLineOpacity(v) {
@@ -473,6 +475,8 @@
     });
     if (typeof vecCanvas !== "undefined" && vecCanvas)
       vecCanvas.style.opacity = v;
+    if (typeof labelCanvas !== "undefined" && labelCanvas)
+      labelCanvas.style.opacity = v;
   }
   map.on("zoomstart", function () { setLineOpacity("0"); });
   map.on("zoomend", function () {
