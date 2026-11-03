@@ -59,6 +59,12 @@ body {
 #mapswitch button:hover, #theme-toggle:hover { color: var(--text); border-color: var(--accent-dim); }
 #mapswitch button.active { background: var(--btn-active); color: var(--accent); border-color: var(--accent-dim); }
 #theme-toggle { margin-left: auto; color: var(--text); }
+/* Cursor (Joel, 2026-11-03): crosshair instead of Leaflet's grab
+   hand. This is a measuring tool — grid, contours and elevation
+   are read at the exact cursor point — and a crosshair keeps
+   that point unambiguous where a hand smears over a whole cell. */
+.leaflet-grab,
+.leaflet-dragging .leaflet-grab { cursor: crosshair; }
 /* ---- stage: everything below the header lives in here, so panel /
    readout / scale bar anchor to the map area, not the viewport — the
    header can wrap at narrow widths without overlapping them ---- */
