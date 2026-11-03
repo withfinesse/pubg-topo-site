@@ -118,8 +118,15 @@
     return L.tileLayer("tiles/" + id + "/art/{z}/{x}/{y}.webp",
       tileOpts({ zIndex: 2, opacity: 1 }));
   }
+  function makeArtPlain(id) {
+    return L.tileLayer("tiles/" + id + "/artplain/{z}/{x}/{y}.webp",
+      tileOpts({ zIndex: 2, opacity: 1 }));
+  }
+  function makeArtLayer(id) {
+    return heightColour ? makeArt(id) : makeArtPlain(id);
+  }
   var topoLayer = makeBaseLayer(current);
-  var artLayer = makeArt(current);
+  var artLayer = makeArtLayer(current);
   var fineLayer = makeFine(current);
   topoLayer.addTo(map);
 
@@ -252,7 +259,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=19")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=20")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -869,8 +876,16 @@
   function syncKey() {
     keyGrad.style.background =
       rampCss(baseMode === "art" ? RAMP_SAND : RAMP_VIVID);
-    keyGrad.style.opacity =
-      baseMode === "topo" && !heightColour ? "0.3" : "1";
+    // Height colour off now means "no tint" on BOTH bases (the art
+    // swaps to its untinted tile set), so the bar dims either way.
+    keyGrad.style.opacity = heightColour ? "1" : "0.3";
+  }
+  /* The fine strip in the key lights up only while the fine layer
+     it describes is actually on. */
+  var keyFine = document.getElementById("key-fine");
+  function syncFineKey() {
+    keyFine.style.opacity =
+      document.getElementById("fine-toggle").checked ? "1" : "0.3";
   }
   function syncLabels() {
     // Place labels are drawn on the vector overlay canvas now —
@@ -892,6 +907,16 @@
     map.removeLayer(topoLayer);
     topoLayer = makeBaseLayer(current);
     topoLayer.addTo(map);
+    // The art layer swaps too: tinted vs untinted tile set, so the
+    // toggle does something real on the art base instead of changing
+    // a layer the art completely covers.
+    var artWasOn = map.hasLayer(artLayer);
+    if (artWasOn) map.removeLayer(artLayer);
+    artLayer = makeArtLayer(current);
+    if (artWasOn) {
+      artLayer.addTo(map);
+      artLayer.setOpacity(artOpacity.value / 100);
+    }
     syncKey();
   });
   linesToggle.addEventListener("change", function (e) {
@@ -909,7 +934,9 @@
   document.getElementById("fine-toggle").addEventListener("change", function (e) {
     if (e.target.checked) fineLayer.addTo(map); else map.removeLayer(fineLayer);
     syncFineLines();
+    syncFineKey();
   });
+  syncFineKey();
   document.getElementById("grid-toggle").addEventListener("change", function (e) {
     majorGrid = e.target.checked; refreshGrid();
   });
@@ -965,7 +992,7 @@
       if (map.hasLayer(artLayer)) map.removeLayer(artLayer);
       if (fineOn) map.removeLayer(fineLayer);
       topoLayer = makeBaseLayer(current);
-      artLayer = makeArt(current);
+      artLayer = makeArtLayer(current);
       fineLayer = makeFine(current);
       topoLayer.addTo(map);
       if (fineOn) fineLayer.addTo(map);
@@ -1032,7 +1059,10 @@
         ? "tiles/" + current + "/base/{z}/{x}/{y}.webp"
         : "tiles/" + current + "/shade/{z}/{x}/{y}.webp", 1);
       if (baseMode === "art")
-        await blit("tiles/" + current + "/art/{z}/{x}/{y}.webp", artOpacity.value / 100);
+        await blit(heightColour
+          ? "tiles/" + current + "/art/{z}/{x}/{y}.webp"
+          : "tiles/" + current + "/artplain/{z}/{x}/{y}.webp",
+          artOpacity.value / 100);
       if (document.getElementById("fine-toggle").checked)
         await blit("tiles/" + current + "/fine/{z}/{x}/{y}.webp", 0.95);
       var expProject = function (x, y) {
@@ -1147,7 +1177,7 @@
       var grad = ctx.createLinearGradient(10, 0, 230, 0);
       expStops.forEach(function (s) { grad.addColorStop(s[0], s[1]); });
       ctx.save();
-      if (baseMode === "topo" && !heightColour) ctx.globalAlpha = 0.35;
+      if (!heightColour) ctx.globalAlpha = 0.35;
       ctx.fillStyle = grad;
       ctx.fillRect(10, h - 18, 220, 8);
       ctx.restore();
@@ -1161,6 +1191,22 @@
       ctx.fillRect(252, h - 18, 14, 8);
       ctx.fillStyle = "#d8dcc9";
       ctx.fillText("water", 272, h - 2);
+      // Fine-detail strip, when the fine layer is in the export and
+      // there's room: purple dips -> brown rises, +-5 m local relief.
+      if (document.getElementById("fine-toggle").checked && w >= 760) {
+        var fgrad = ctx.createLinearGradient(330, 0, 540, 0);
+        [[0, "#5e3c99"], [0.35, "#a79bc9"], [0.5, "#f2efe9"],
+         [0.65, "#d9a05a"], [1, "#8c4a12"]].forEach(function (s) {
+          fgrad.addColorStop(s[0], s[1]);
+        });
+        ctx.fillStyle = fgrad;
+        ctx.fillRect(330, h - 18, 210, 8);
+        ctx.fillStyle = "#d8dcc9";
+        ctx.fillText("dips −5 m", 330, h - 2);
+        ctx.textAlign = "right";
+        ctx.fillText("rises +5 m", 540, h - 2);
+        ctx.textAlign = "left";
+      }
       cv.toBlob(function (blob) {
         var a = document.createElement("a");
         a.href = URL.createObjectURL(blob);

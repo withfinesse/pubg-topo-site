@@ -68,13 +68,14 @@ body {
   position: absolute; top: 12px; left: 12px; z-index: 1100;
   width: 248px; background: var(--panel); border: 1px solid var(--line);
   backdrop-filter: blur(3px);
+  max-height: calc(100% - 24px); display: flex; flex-direction: column;
 }
 #panel-collapse {
   display: none; width: 100%; font: inherit; font-size: 12px;
   letter-spacing: 0.2em; background: transparent; color: var(--accent);
   border: none; padding: 9px; cursor: pointer; text-align: left;
 }
-#panel-body { padding: 12px 14px 6px; }
+#panel-body { padding: 12px 14px 6px; overflow-y: auto; min-height: 0; }
 #panel section { border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 10px; }
 #panel section:last-child { border-bottom: none; }
 #panel h2 {
@@ -89,6 +90,9 @@ body {
 .note { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin: 6px 0 2px; }
 #key-grad { height: 10px; border: 1px solid var(--line); }
 #key-ticks { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); margin-top: 2px; }
+#key-fine { margin-top: 8px; transition: opacity .15s ease; }
+#key-fine-grad { height: 10px; border: 1px solid var(--line); background: linear-gradient(90deg, #5e3c99 0%, #a79bc9 35%, #f2efe9 50%, #d9a05a 65%, #8c4a12 100%); }
+#key-fine-ticks { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); margin-top: 2px; }
 .key-water { display: inline-block; width: 10px; height: 10px; background: #9ec2db; border: 1px solid var(--line); vertical-align: -1px; margin-right: 5px; }
 #export-btn {
   width: 100%; font: inherit; font-size: 12px; letter-spacing: 0.12em;
