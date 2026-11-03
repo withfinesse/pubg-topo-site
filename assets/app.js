@@ -259,7 +259,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=23")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=24")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -277,6 +277,50 @@
       })
       .catch(function () { return null; });  // shading still works
     return vecPromise[id];
+  }
+
+  /* ---------- cursor elevation (ELV1 grids) ----------
+     elev/<map>.bin.gz: 'ELV1' + uint32 N + N*N int16 metres —
+     the full heightmap block-averaged to ~4 m cells (see
+     make_elev.py). Lazy-loaded per map like the vectors; the
+     readout bilinear-samples it. Measured error vs the full-res
+     data: ~0.8 m at the Erangel summit, ~0.1-0.3 m on ordinary
+     ground. Below the -0.5 m shoreline the readout switches to
+     DEPTH, so the bathymetry in the data shows too. */
+  var elevCache = {}, elevPromise = {};
+  function loadElev(id) {
+    if (elevPromise[id]) return elevPromise[id];
+    elevPromise[id] = fetch("elev/" + id + ".bin.gz?v=24")
+      .then(function (r) { return r.arrayBuffer(); })
+      .then(function (buf) {
+        var b = new Uint8Array(buf);
+        if (b[0] === 0x45 && b[1] === 0x4c) return buf;   // 'EL'
+        var stream = new DecompressionStream("gzip");
+        return new Response(
+          new Blob([buf]).stream().pipeThrough(stream)).arrayBuffer();
+      })
+      .then(function (buf) {
+        var n = new DataView(buf).getUint32(4, true);
+        elevCache[id] = { n: n, z: new Int16Array(buf, 8, n * n) };
+        if (id === current) showCoords(map.getCenter());
+      })
+      .catch(function () { /* readout just stays without ELEV */ });
+    return elevPromise[id];
+  }
+  function sampleElev(latlng) {
+    var e = elevCache[current];
+    if (!e) return null;
+    var S = G / e.n;                       // master px per grid cell
+    var u = latlng.lng / S - 0.5, v = -latlng.lat / S - 0.5;
+    var x0 = Math.min(Math.max(Math.floor(u), 0), e.n - 2);
+    var y0 = Math.min(Math.max(Math.floor(v), 0), e.n - 2);
+    var tx = Math.min(Math.max(u - x0, 0), 1);
+    var ty = Math.min(Math.max(v - y0, 0), 1);
+    var z = e.z, n = e.n;
+    var a = z[y0 * n + x0], b = z[y0 * n + x0 + 1];
+    var c = z[(y0 + 1) * n + x0], d = z[(y0 + 1) * n + x0 + 1];
+    return (a * (1 - tx) + b * tx) * (1 - ty) +
+           (c * (1 - tx) + d * tx) * ty;
   }
   function segsInRect(set, x0, y0, x1, y1) {
     var cx0 = Math.max(0, Math.floor(x0 / CELL)),
@@ -653,6 +697,7 @@
     scheduleVecLabels(true);
   });
   loadVectors(current);
+  loadElev(current);
 
   /* ---------- grids (canvas GridLayer): 1 km cells + optional 100 m
      minor lines, as on the in-game map. Two independent toggles, each
@@ -829,8 +874,14 @@
   function showCoords(latlng) {
     var f = fmt(latlng);
     if (!f) { readout.innerHTML = "— OUTSIDE MAP —"; return; }
-    readout.innerHTML = "GRID <b>" + f.cell + "</b> · X " +
+    var s = "GRID <b>" + f.cell + "</b> · X " +
       f.xKm.toFixed(2) + " KM · Y " + f.yKm.toFixed(2) + " KM";
+    var e = sampleElev(latlng);
+    if (e !== null) {
+      if (e < -0.5) s += " · DEPTH <b>" + Math.round(-e) + "</b> M";
+      else s += " · ELEV <b>" + Math.max(0, Math.round(e)) + "</b> M";
+    }
+    readout.innerHTML = s;
   }
   map.on("mousemove", function (e) { showCoords(e.latlng); });
   map.on("move", function () { showCoords(map.getCenter()); });
@@ -1005,6 +1056,7 @@
       topoLayer.addTo(map);
       if (fineOn) fineLayer.addTo(map);
       loadVectors(current);
+      loadElev(current);
       refreshLineLayers();
       drawVecLabels(true);
       syncBase();
