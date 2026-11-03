@@ -159,3 +159,4 @@ body {
 /* Line overlays fade out during a zoom gesture and back in over
    the gesture-end redraw (see setLineOpacity in app.js). */
 .vec-line-canvas { transition: opacity .13s ease-out; }
+.vec-labels-canvas { transition: opacity .13s ease-out; }
