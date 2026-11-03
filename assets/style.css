@@ -75,7 +75,10 @@ body {
   letter-spacing: 0.2em; background: transparent; color: var(--accent);
   border: none; padding: 9px; cursor: pointer; text-align: left;
 }
-#panel-body { padding: 12px 14px 6px; overflow-y: auto; min-height: 0; }
+#panel-body { padding: 12px 14px 6px; overflow-y: auto; min-height: 0; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+#panel-body::-webkit-scrollbar { width: 6px; }
+#panel-body::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+#panel-body::-webkit-scrollbar-track { background: transparent; }
 #panel section { border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 10px; }
 #panel section:last-child { border-bottom: none; }
 #panel h2 {
