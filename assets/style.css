@@ -169,3 +169,14 @@ body {
 .vec-line-canvas { transition: opacity .13s ease-out; }
 .vec-labels-canvas { transition: opacity .13s ease-out; }
 .grid-labels-canvas { transition: opacity .13s ease-out; }
+
+/* Grid style rows on small screens: at the 212 px panel width the
+   swatch + "thickness" + value leave the slider a ~28 px stub.
+   Wrap instead: caption row on top, slider full-width underneath
+   where a thumb can use it. (#panel prefix + end of file: these
+   must outrank the base .gridstyle rules above.) */
+@media (max-width: 760px) {
+  #panel .gridstyle { flex-wrap: wrap; row-gap: 2px; }
+  #panel .gridstyle input[type="range"] { order: 3; flex: 1 0 100%; }
+  #panel .gs-val { margin-left: auto; }
+}
