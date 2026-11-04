@@ -259,7 +259,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=25")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=26")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -290,7 +290,7 @@
   var elevCache = {}, elevPromise = {};
   function loadElev(id) {
     if (elevPromise[id]) return elevPromise[id];
-    elevPromise[id] = fetch("elev/" + id + ".bin.gz?v=25")
+    elevPromise[id] = fetch("elev/" + id + ".bin.gz?v=26")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         var b = new Uint8Array(buf);
@@ -1006,11 +1006,18 @@
   var gridWidthIn = document.getElementById("grid-width");
   var grid100ColorIn = document.getElementById("grid100-color");
   var grid100WidthIn = document.getElementById("grid100-width");
+  function syncGridVals() {
+    document.getElementById("grid-width-val").textContent =
+      gridStyle.major.width + " px";
+    document.getElementById("grid100-width-val").textContent =
+      gridStyle.minor.width + " px";
+  }
   function syncGridInputs() {
     gridColorIn.value = gridStyle.major.color;
     gridWidthIn.value = gridStyle.major.width;
     grid100ColorIn.value = gridStyle.minor.color;
     grid100WidthIn.value = gridStyle.minor.width;
+    syncGridVals();
   }
   var styleTimer = null;
   function refreshGridSoon() {
@@ -1025,7 +1032,7 @@
     });
     widthIn.addEventListener("input", function () {
       gridStyle[key].width = parseFloat(widthIn.value);
-      saveGridStyle(); refreshGridSoon();
+      saveGridStyle(); refreshGridSoon(); syncGridVals();
     });
   }
   bindGridStyle(gridColorIn, gridWidthIn, "major");

@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PUBG TOPO — Topographic maps for PUBG's competitive maps</title>
 <meta name="description" content="Real topographic maps (contours, hillshade, micro-relief) for Erangel, Miramar, Taego and Rondo — built from the game's own terrain data.">
-<link rel="stylesheet" href="assets/vendor/leaflet.css?v=25">
-<link rel="stylesheet" href="assets/style.css?v=25">
+<link rel="stylesheet" href="assets/vendor/leaflet.css?v=26">
+<link rel="stylesheet" href="assets/style.css?v=26">
 </head>
 <body>
 <header id="topbar">
@@ -50,11 +50,15 @@
       <label class="row"><input type="checkbox" id="grid-toggle" checked>
         <span>1 km grid</span></label>
       <div class="gridstyle"><input type="color" id="grid-color" value="#f2f5e2" title="1 km grid colour">
-        <input type="range" id="grid-width" min="1" max="4" step="0.5" value="1.5" title="1 km grid thickness"></div>
+        <span class="gs-label">thickness</span>
+        <input type="range" id="grid-width" min="1" max="4" step="0.5" value="1.5" title="1 km grid thickness">
+        <span class="gs-val" id="grid-width-val">1.5 px</span></div>
       <label class="row"><input type="checkbox" id="grid100-toggle">
         <span>100 m grid</span></label>
       <div class="gridstyle"><input type="color" id="grid100-color" value="#f2f5e2" title="100 m grid colour">
-        <input type="range" id="grid100-width" min="1" max="4" step="0.5" value="1" title="100 m grid thickness"></div>
+        <span class="gs-label">thickness</span>
+        <input type="range" id="grid100-width" min="1" max="4" step="0.5" value="1" title="100 m grid thickness">
+        <span class="gs-val" id="grid100-width-val">1 px</span></div>
       <label class="row"><input type="checkbox" id="labels-toggle" checked>
         <span>Place labels</span></label>
       <p class="note" id="labels-note"></p>
@@ -108,8 +112,8 @@
   </div>
 </footer>
 
-<script src="assets/vendor/leaflet.js?v=25"></script>
-<script src="assets/app.js?v=25"></script>
+<script src="assets/vendor/leaflet.js?v=26"></script>
+<script src="assets/app.js?v=26"></script>
 <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0cd1bf4b24374a2fba8f58bde7723f6d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>
