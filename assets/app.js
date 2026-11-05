@@ -259,7 +259,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=27")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=28")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -290,7 +290,7 @@
   var elevCache = {}, elevPromise = {};
   function loadElev(id) {
     if (elevPromise[id]) return elevPromise[id];
-    elevPromise[id] = fetch("elev/" + id + ".bin.gz?v=27")
+    elevPromise[id] = fetch("elev/" + id + ".bin.gz?v=28")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         var b = new Uint8Array(buf);
@@ -1049,6 +1049,8 @@
         x.classList.toggle("active", x === b);
       });
       current = b.dataset.map;
+      mA = mB = null;   // measure points belong to the old map
+      drawMeasure();
       // Recreate the layers instead of setUrl(): Leaflet 1.9's
       // setUrl -> redraw path stores the raw fractional map zoom as the
       // tile zoom, producing fractional tile URLs (…/2.5/…) that 404 and
@@ -1070,6 +1072,80 @@
     });
   });
   syncBase();
+
+  /* ---------- measure tool (Joel's pick, 2026-11-05) ----------
+     Two clicks drop A and B; a chip on the line and the panel
+     both read distance / bearing / elevation change. A third
+     click starts over. Dragging the map never places a point:
+     the click handler ignores anything that moved >5 px since
+     mousedown. Frame math: lat increases northward in this CRS
+     (lat 0 = north edge), lng eastward, SPAN km across G units. */
+  var measureOn = false, mA = null, mB = null;
+  var measureLayer = L.layerGroup().addTo(map);
+  var measureResult = document.getElementById("measure-result");
+  var measureClearBtn = document.getElementById("measure-clear");
+  var M_PER_UNIT = SPAN * 1000 / G;
+  function measureText() {
+    if (!mA) return "Click the first point.";
+    var ea = sampleElev(mA);
+    if (!mB) return "A set" + (ea !== null ? " at " + Math.round(ea) + " m" : "") +
+      " — click the second point.";
+    var ex = mB.lng - mA.lng, ny = mB.lat - mA.lat;
+    var dist = Math.round(Math.hypot(ex, ny) * M_PER_UNIT);
+    var brg = Math.round((Math.atan2(ex, ny) * 180 / Math.PI + 360) % 360);
+    var txt = dist + " m · " + ("00" + brg).slice(-3) + "°";
+    var eb = sampleElev(mB);
+    if (ea !== null && eb !== null) {
+      var d = Math.round(eb - ea);
+      txt += " · Δ " + (d >= 0 ? "+" + d : "−" + Math.abs(d)) + " m";
+    }
+    return txt;
+  }
+  function drawMeasure() {
+    measureLayer.clearLayers();
+    measureResult.textContent = measureOn ? measureText()
+      : "Tick on, then click two points on the map.";
+    measureClearBtn.style.display = (mA || mB) ? "" : "none";
+    if (!mA) return;
+    var dot = { radius: 4.5, color: "#0b0e13", weight: 1.5,
+                fillColor: "#c8b06a", fillOpacity: 1 };
+    if (mB) {
+      L.polyline([mA, mB], { color: "#c8b06a", weight: 2.5 })
+        .addTo(measureLayer);
+      L.tooltip({ permanent: true, direction: "top",
+                  className: "measure-tip" })
+        .setLatLng(L.latLng((mA.lat + mB.lat) / 2, (mA.lng + mB.lng) / 2))
+        .setContent(measureText()).addTo(measureLayer);
+    }
+    L.circleMarker(mA, dot).addTo(measureLayer);
+    if (mB) L.circleMarker(mB, dot).addTo(measureLayer);
+  }
+  document.getElementById("measure-toggle").addEventListener("change",
+    function (e) {
+      measureOn = e.target.checked;
+      if (!measureOn) { mA = mB = null; }
+      drawMeasure();
+    });
+  measureClearBtn.addEventListener("click", function () {
+    mA = mB = null; drawMeasure();
+  });
+  var downXY = null;
+  map.getContainer().addEventListener("mousedown", function (ev) {
+    downXY = [ev.clientX, ev.clientY];
+  });
+  map.on("click", function (e) {
+    if (!measureOn) return;
+    var oe = e.originalEvent;
+    if (downXY && oe && typeof oe.clientX === "number" &&
+        Math.hypot(oe.clientX - downXY[0], oe.clientY - downXY[1]) > 5)
+      return;   // that was a drag, not a click
+    if (!mA || mB) { mA = e.latlng; mB = null; }
+    else mB = e.latlng;
+    drawMeasure();
+  });
+  window.pubgtopoMeasure = function () {
+    return { on: measureOn, a: mA, b: mB, text: measureResult.textContent };
+  };
 
   /* ---------- export current view ---------- */
   function loadTile(url) {

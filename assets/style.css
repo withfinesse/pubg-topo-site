@@ -110,6 +110,23 @@ body {
 }
 #export-btn:hover { border-color: var(--accent); }
 #export-btn[disabled] { opacity: 0.55; cursor: wait; }
+/* ---- measure tool ---- */
+#measure-result {
+  font-size: 12px; letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+#measure-clear {
+  font: inherit; font-size: 11px; letter-spacing: 0.12em;
+  background: var(--btn-active); color: var(--accent);
+  border: 1px solid var(--accent-dim); padding: 5px 10px; cursor: pointer;
+}
+#measure-clear:hover { border-color: var(--accent); }
+.measure-tip {
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--accent-dim); box-shadow: none;
+  font-size: 12px; letter-spacing: 0.06em; font-variant-numeric: tabular-nums;
+}
+.measure-tip:before { display: none; }
 /* ---- map ---- */
 #map { position: absolute; inset: 0; background: var(--map-bg); }
 .leaflet-container { background: var(--map-bg); font: inherit; }
