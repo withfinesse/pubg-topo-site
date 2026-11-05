@@ -6,10 +6,10 @@
   "use strict";
   var G = 4096, SPAN = 8.16, MAXLVL = 4, CELL = G / 8; // 512 units = 1.02 km
   var MAPS = {
-    erangel: { name: "ERANGEL", stats: "Baltic · 8×8 km · elevation −81.5 m … +248.2 m (Stalber) · 27 place labels on their own layer" },
-    miramar: { name: "MIRAMAR", stats: "Desert · 8×8 km · elevation −90.4 m … +256.0 m · source data saturates at the highest plateaus · 28 place labels on their own layer" },
-    taego:   { name: "TAEGO",   stats: "Tiger · 8×8 km · elevation −222.3 m … +181.1 m · 19 place labels on their own layer" },
-    rondo:   { name: "RONDO",   stats: "Neon · 8×8 km · elevation −32.6 m … +244.6 m · 25 place labels on their own layer" }
+    erangel: { name: "ERANGEL", stats: "Baltic · 8×8 km · heights −81.5…+248.2 m (highest: Stalber) · 27 places labelled" },
+    miramar: { name: "MIRAMAR", stats: "Desert · 8×8 km · heights −90.4…+256.0 m (the game data caps the highest plateaus) · 28 places labelled" },
+    taego:   { name: "TAEGO",   stats: "Tiger · 8×8 km · heights −222.3…+181.1 m · 19 places labelled" },
+    rondo:   { name: "RONDO",   stats: "Neon · 8×8 km · heights −32.6…+244.6 m · 25 places labelled" }
   };
   var current = "erangel";
   var baseMode = "topo";
@@ -259,7 +259,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=28")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=29")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -290,7 +290,7 @@
   var elevCache = {}, elevPromise = {};
   function loadElev(id) {
     if (elevPromise[id]) return elevPromise[id];
-    elevPromise[id] = fetch("elev/" + id + ".bin.gz?v=28")
+    elevPromise[id] = fetch("elev/" + id + ".bin.gz?v=29")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         var b = new Uint8Array(buf);
@@ -917,10 +917,10 @@
       map.removeLayer(artLayer);
     }
     artOpacity.disabled = !wantArt;
-    artNote.textContent = "Art overlay: topo drawn over the official map art. Slider crossfades it against the topo sheet.";
+    artNote.textContent = "The game's own map art, under the topo layers. The slider fades between art and topo sheet.";
     var poisNow = curPois();
     labelsNote.textContent = poisNow
-      ? "Place labels: " + poisNow.length + " named locations from the official map art, on their own layer above everything else."
+      ? "Place labels: " + poisNow.length + " named locations, taken from the official map art."
       : "Place labels: not available on this map yet.";
     document.getElementById("map-name").textContent = MAPS[current].name;
     document.getElementById("map-stats").textContent = MAPS[current].stats;
@@ -1146,6 +1146,27 @@
   window.pubgtopoMeasure = function () {
     return { on: measureOn, a: mA, b: mB, text: measureResult.textContent };
   };
+
+  /* ---------- how-to-use overlay ----------
+     Opens by itself on a first visit (the flag is set when it
+     closes, however it closes); the header button reopens it. */
+  var helpOverlay = document.getElementById("help-overlay");
+  function openHelp() { helpOverlay.hidden = false; }
+  function closeHelp() {
+    helpOverlay.hidden = true;
+    try { localStorage.setItem("pubgtopo-seen-help", "1"); } catch (e) {}
+  }
+  document.getElementById("help-btn").addEventListener("click", openHelp);
+  document.getElementById("help-close").addEventListener("click", closeHelp);
+  helpOverlay.addEventListener("click", function (e) {
+    if (e.target === helpOverlay) closeHelp();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !helpOverlay.hidden) closeHelp();
+  });
+  try {
+    if (!localStorage.getItem("pubgtopo-seen-help")) openHelp();
+  } catch (e) {}
 
   /* ---------- export current view ---------- */
   function loadTile(url) {

@@ -50,15 +50,16 @@ body {
 }
 .brand-sub { font-size: 9.5px; letter-spacing: 0.28em; color: var(--muted); margin-top: 3px; }
 #mapswitch { display: flex; gap: 6px; margin-left: 12px; flex-wrap: wrap; }
-#mapswitch button, #theme-toggle {
+#mapswitch button, #theme-toggle, #help-btn {
   font: inherit; font-size: 12px; letter-spacing: 0.14em;
   background: transparent; color: var(--muted);
   border: 1px solid var(--line); padding: 7px 12px; cursor: pointer;
   text-transform: uppercase;
 }
-#mapswitch button:hover, #theme-toggle:hover { color: var(--text); border-color: var(--accent-dim); }
+#mapswitch button:hover, #theme-toggle:hover, #help-btn:hover { color: var(--text); border-color: var(--accent-dim); }
 #mapswitch button.active { background: var(--btn-active); color: var(--accent); border-color: var(--accent-dim); }
 #theme-toggle { margin-left: auto; color: var(--text); }
+#help-btn { margin-left: 8px; color: var(--text); }
 /* Cursor (Joel, 2026-11-03): crosshair instead of Leaflet's grab
    hand. This is a measuring tool — grid, contours and elevation
    are read at the exact cursor point — and a crosshair keeps
@@ -196,4 +197,38 @@ body {
   #panel .gridstyle { flex-wrap: wrap; row-gap: 2px; }
   #panel .gridstyle input[type="range"] { order: 3; flex: 1 0 100%; }
   #panel .gs-val { margin-left: auto; }
+}
+
+/* ---- how-to-use overlay ---- */
+#help-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(4, 6, 4, 0.62);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+#help-overlay[hidden] { display: none; }
+#help-card {
+  position: relative; width: 100%; max-width: 580px;
+  max-height: 86vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--accent-dim);
+  color: var(--text); padding: 20px 24px 14px;
+}
+#help-card h2 {
+  font-size: 12px; letter-spacing: 0.3em; color: var(--accent);
+  margin: 0 0 10px; font-weight: 700;
+}
+#help-card ul { margin: 10px 0; padding-left: 18px; }
+#help-card li { font-size: 13.5px; line-height: 1.5; margin: 7px 0; }
+#help-card li b { color: var(--accent); font-weight: 700; }
+.help-lede, .help-foot { font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.help-foot { border-top: 1px solid var(--line); padding-top: 10px; }
+#help-close {
+  position: absolute; top: 6px; right: 8px;
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); font-size: 16px; padding: 6px 8px;
+}
+#help-close:hover { color: var(--text); }
+@media (max-width: 760px) {
+  #help-card { padding: 16px 16px 10px; }
+  #help-card li { font-size: 13px; }
 }

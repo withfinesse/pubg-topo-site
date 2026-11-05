@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PUBG TOPO — Topographic maps for PUBG's competitive maps</title>
 <meta name="description" content="Real topographic maps (contours, hillshade, micro-relief) for Erangel, Miramar, Taego and Rondo — built from the game's own terrain data.">
-<link rel="stylesheet" href="assets/vendor/leaflet.css?v=28">
-<link rel="stylesheet" href="assets/style.css?v=28">
+<link rel="stylesheet" href="assets/vendor/leaflet.css?v=29">
+<link rel="stylesheet" href="assets/style.css?v=29">
 </head>
 <body>
 <header id="topbar">
@@ -21,6 +21,7 @@
     <button data-map="rondo">RONDO</button>
   </nav>
   <button id="theme-toggle" title="Toggle light / dark chrome">LIGHT&nbsp;MODE</button>
+  <button id="help-btn" title="How to use this page">HOW&nbsp;TO&nbsp;USE</button>
 </header>
 
 <div id="stage">
@@ -33,7 +34,7 @@
         <span>Topo sheet</span></label>
       <label class="row"><input type="radio" name="base" value="art" id="base-art-radio">
         <span>Map art overlay</span></label>
-      <p class="note" id="art-note">Art overlay: topo drawn over the official map art.</p>
+      <p class="note" id="art-note">The game's own map art, under the topo layers.</p>
       <label class="row slider-row">
         <span>Art opacity</span>
         <input type="range" id="art-opacity" min="10" max="100" value="100" disabled>
@@ -46,7 +47,7 @@
       <label class="row"><input type="checkbox" id="lines-toggle" checked>
         <span>Contour lines</span></label>
       <label class="row"><input type="checkbox" id="fine-toggle">
-        <span>Fine detail — 2 m contours + micro-relief</span></label>
+        <span>Fine detail — dips, rises, 2 m contours</span></label>
       <label class="row"><input type="checkbox" id="grid-toggle" checked>
         <span>1 km grid</span></label>
       <div class="gridstyle"><input type="color" id="grid-color" value="#f2f5e2" title="1 km grid colour">
@@ -73,33 +74,32 @@
     <section>
       <h2>EXPORT</h2>
       <button id="export-btn">DOWNLOAD CURRENT VIEW (PNG)</button>
-      <p class="note">Stitches the visible tiles at the current zoom into a
-        square PNG — the map's own shape — with fine detail, grids and
-        labels if they're on. For print / screenshots.</p>
+      <p class="note">Downloads a square PNG of the view on screen,
+        with whichever overlays are switched on. Handy for
+        screenshots and printing.</p>
     </section>
     
     <section>
       <h2>KEY</h2>
       <div id="key-grad"></div>
       <div id="key-ticks"><span>0</span><span>50</span><span>100</span><span>150</span><span>200</span><span>250 m</span></div>
-      <p class="note"><span class="key-water"></span>Water — sea and lakes. Shorelines are drawn at −0.5 m, so the ankle-deep fringe counts as shore, not sea.</p>
-      <p class="note">Height colour: vivid ramp on the topo sheet, sand
-        ramp blended into the map art. One fixed 0–250 m scale on every
-        map, so colours compare across maps.</p>
+      <p class="note"><span class="key-water"></span>Water — sea and lakes. The shoreline sits at −0.5 m, so the shallow edge counts as land, not water.</p>
+      <p class="note">Height colour: green is low, pink is high on the
+        topo sheet; a softer sand ramp on the map art. Same 0–250 m
+        scale on all four maps, so a colour means the same height
+        everywhere.</p>
       <div id="key-fine">
         <div id="key-fine-grad"></div>
         <div id="key-fine-ticks"><span>−5 m dips</span><span>local relief</span><span>rises +5 m</span></div>
-        <p class="note">Fine detail colours local relief only — purple
-          bowls and dips, brown rises. Separate from height colour;
-          blue is water, everywhere.</p>
+        <p class="note">Fine detail shows small ups and downs only:
+          purple for dips, brown for rises. Blue always means water.</p>
       </div>
     </section>
     <section>
       <h2 id="map-name">ERANGEL</h2>
       <p class="note" id="map-stats"></p>
-      <p class="note">Contours 10 m · index 50 m labelled.
-        Fine layer: tiered 2 m contours + micro-relief (±5 m) —
-        built to expose the 1–5 m bowls and dips that decide late-game fights.</p>
+      <p class="note">Thin contour lines every 10 m; the labelled
+        ones every 50 m.</p>
     </section>
   </div>
 </aside>
@@ -112,15 +112,53 @@
 
 <footer id="footer">
   <span>Unofficial fan project — not affiliated with KRAFTON or PUBG Studios.
-    Terrain derived from the game files; no game assets are distributed by the extraction tool.</span>
+    Terrain built from PUBG's own game data.</span>
   <div class="foot-links">
     <a href="https://buymeacoffee.com/arizonajoel" target="_blank" rel="noopener">☕ Buy me a coffee</a>
     <a href="https://github.com/withfinesse/pubg-topographic-maps" target="_blank" rel="noopener">Build your own: pubgtopo on GitHub</a>
   </div>
 </footer>
 
-<script src="assets/vendor/leaflet.js?v=28"></script>
-<script src="assets/app.js?v=28"></script>
+<div id="help-overlay" hidden>
+  <div id="help-card" role="dialog" aria-modal="true" aria-label="How to use this page">
+    <button id="help-close" aria-label="Close">✕</button>
+    <h2>HOW TO USE THIS PAGE</h2>
+    <p class="help-lede">Real topographic maps of PUBG's four 8×8 km maps,
+      built from the game's own terrain data. All heights are in metres.</p>
+    <ul>
+      <li><b>Move around</b> — drag to pan, scroll or pinch to zoom.
+        Pick a map with the buttons at the top.</li>
+      <li><b>Read the ground</b> — contour lines join points of equal
+        height: thin lines every 10 m, labelled lines every 50 m.
+        Lines packed close together mean steep ground; wide apart
+        means flat.</li>
+      <li><b>Height colour</b> — green is low ground, pink is high
+        (the KEY at the bottom of the panel). Blue is always water.</li>
+      <li><b>The readout</b> at the bottom left follows your cursor:
+        grid square, position, and the elevation under the pointer —
+        or the depth, under water.</li>
+      <li><b>Grid references</b> — the letters and numbers around the
+        edge name each 1 km square, like C4. Add the 100 m grid for
+        finer references.</li>
+      <li><b>Fine detail</b> — the small stuff: dips, ditches and
+        rises of a few metres that can hide a prone player or break
+        a line of sight.</li>
+      <li><b>Measure</b> — tick Measure in the panel, click two
+        points: distance, bearing and elevation change.</li>
+      <li><b>Two bases</b> — the topo sheet, or the game's own map
+        art with the topo layers drawn over it. Art opacity fades
+        between them.</li>
+      <li><b>Export</b> — downloads a square PNG of the current view,
+        for sharing or printing.</li>
+    </ul>
+    <p class="help-foot">One honest limit: everything here comes from
+      terrain height alone. Buildings and trees aren't in the data,
+      so a slope that looks clear may still have a house on it.</p>
+  </div>
+</div>
+
+<script src="assets/vendor/leaflet.js?v=29"></script>
+<script src="assets/app.js?v=29"></script>
 <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0cd1bf4b24374a2fba8f58bde7723f6d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>
