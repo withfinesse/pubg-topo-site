@@ -220,6 +220,7 @@ body {
 #help-card ul { margin: 10px 0; padding-left: 18px; }
 #help-card li { font-size: 13.5px; line-height: 1.5; margin: 7px 0; }
 #help-card li b { color: var(--accent); font-weight: 700; }
+#help-card a { color: var(--accent); }
 .help-lede, .help-foot { font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .help-foot { border-top: 1px solid var(--line); padding-top: 10px; }
 #help-close {
