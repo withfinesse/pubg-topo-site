@@ -259,7 +259,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=29")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=30")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -290,7 +290,7 @@
   var elevCache = {}, elevPromise = {};
   function loadElev(id) {
     if (elevPromise[id]) return elevPromise[id];
-    elevPromise[id] = fetch("elev/" + id + ".bin.gz?v=29")
+    elevPromise[id] = fetch("elev/" + id + ".bin.gz?v=30")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         var b = new Uint8Array(buf);
@@ -903,8 +903,6 @@
 
   /* ---------- controls ---------- */
   var artOpacity = document.getElementById("art-opacity");
-  var artNote = document.getElementById("art-note");
-  var labelsNote = document.getElementById("labels-note");
   var labelsToggle = document.getElementById("labels-toggle");
   var artRadio = document.getElementById("base-art-radio");
 
@@ -917,11 +915,6 @@
       map.removeLayer(artLayer);
     }
     artOpacity.disabled = !wantArt;
-    artNote.textContent = "The game's own map art, under the topo layers. The slider fades between art and topo sheet.";
-    var poisNow = curPois();
-    labelsNote.textContent = poisNow
-      ? "Place labels: " + poisNow.length + " named locations, taken from the official map art."
-      : "Place labels: not available on this map yet.";
     document.getElementById("map-name").textContent = MAPS[current].name;
     document.getElementById("map-stats").textContent = MAPS[current].stats;
     syncLabels();
@@ -1103,6 +1096,7 @@
   }
   function drawMeasure() {
     measureLayer.clearLayers();
+    measureResult.style.display = measureOn ? "" : "none";
     measureResult.textContent = measureOn ? measureText()
       : "Tick on, then click two points on the map.";
     measureClearBtn.style.display = (mA || mB) ? "" : "none";
