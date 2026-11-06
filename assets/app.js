@@ -259,7 +259,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=31")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=32")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -285,12 +285,14 @@
      make_elev.py). Lazy-loaded per map like the vectors; the
      readout bilinear-samples it. Measured error vs the full-res
      data: ~0.8 m at the Erangel summit, ~0.1-0.3 m on ordinary
-     ground. Below the -0.5 m shoreline the readout switches to
-     DEPTH, so the bathymetry in the data shows too. */
+     ground. Below -0.5 m the readout switches to DEPTH, so the
+     bathymetry in the data shows too; cells the art coastline
+     calls land are clamped to >= 0 in the grids (see
+     make_elev.py), so drivable shore never reads as depth. */
   var elevCache = {}, elevPromise = {};
   function loadElev(id) {
     if (elevPromise[id]) return elevPromise[id];
-    elevPromise[id] = fetch("elev/" + id + ".bin.gz?v=31")
+    elevPromise[id] = fetch("elev/" + id + ".bin.gz?v=32")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         var b = new Uint8Array(buf);
