@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PUBG TOPO — Topographic maps for PUBG's competitive maps</title>
 <meta name="description" content="Real topographic maps (contours, hillshade, micro-relief) for Erangel, Miramar, Taego and Rondo — built from the game's own terrain data.">
-<link rel="stylesheet" href="assets/vendor/leaflet.css?v=32">
-<link rel="stylesheet" href="assets/style.css?v=32">
+<link rel="stylesheet" href="assets/vendor/leaflet.css?v=33">
+<link rel="stylesheet" href="assets/style.css?v=33">
 </head>
 <body>
 <header id="topbar">
@@ -68,6 +68,32 @@
         <span>Measure distance</span></label>
       <p class="note" id="measure-result" style="display:none">Tick on, then click two points on the map.</p>
       <button id="measure-clear" style="display:none">CLEAR</button>
+    </section>
+    <section>
+      <h2>LINE OF SIGHT</h2>
+      <label class="row"><input type="checkbox" id="viewshed-toggle">
+        <span>Viewshed — what a spot can see</span></label>
+      <div id="viewshed-controls" style="display:none">
+        <label class="row slider-row">
+          <span>Eye height</span>
+          <select id="viewshed-eye">
+            <option value="1.7" selected>Standing</option>
+            <option value="1.0">Crouch</option>
+            <option value="0.4">Prone</option>
+          </select>
+        </label>
+        <label class="row slider-row">
+          <span>Range</span>
+          <select id="viewshed-range">
+            <option value="500">500 m</option>
+            <option value="1000" selected>1 km</option>
+            <option value="2000">2 km</option>
+            <option value="0">Whole map</option>
+          </select>
+        </label>
+      </div>
+      <p class="note" id="viewshed-result" style="display:none">Tick on, then click a spot on the map.</p>
+      <button id="viewshed-clear" style="display:none">CLEAR</button>
     </section>
     <section>
       <h2>EXPORT</h2>
@@ -135,6 +161,12 @@
         a line of sight.</li>
       <li><b>Measure</b> — tick Measure in the panel, click two
         points: distance, bearing and elevation change.</li>
+      <li><b>Line of sight</b> — tick Viewshed in the panel, click
+        any spot: green ground is visible from there, red is dead
+        ground the terrain hides. Drag the gold pin to move it;
+        eye height (standing / crouch / prone) and range are in
+        the panel. Terrain only — a building can still block a
+        view the map calls clear.</li>
       <li><b>Two bases</b> — the topo sheet, or the game's own map
         art with the topo layers drawn over it. Art opacity fades
         between them.</li>
@@ -150,8 +182,8 @@
   </div>
 </div>
 
-<script src="assets/vendor/leaflet.js?v=32"></script>
-<script src="assets/app.js?v=32"></script>
+<script src="assets/vendor/leaflet.js?v=33"></script>
+<script src="assets/app.js?v=33"></script>
 <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0cd1bf4b24374a2fba8f58bde7723f6d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

@@ -128,6 +128,29 @@ body {
   font-size: 12px; letter-spacing: 0.06em; font-variant-numeric: tabular-nums;
 }
 .measure-tip:before { display: none; }
+/* ---- viewshed tool ---- */
+#viewshed-result {
+  font-size: 12px; letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+#viewshed-clear {
+  font: inherit; font-size: 11px; letter-spacing: 0.12em;
+  background: var(--btn-active); color: var(--accent);
+  border: 1px solid var(--accent-dim); padding: 5px 10px; cursor: pointer;
+}
+#viewshed-clear:hover { border-color: var(--accent); }
+#viewshed-controls select {
+  font: inherit; font-size: 12px; background: var(--btn-active);
+  color: var(--text); border: 1px solid var(--line); padding: 3px 4px;
+}
+.viewshed-canvas { transition: opacity .13s ease-out; }
+.vs-pin-wrap { background: none; border: none; }
+.vs-pin {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid #0b0e13; background: #c8b06a;
+  box-shadow: 0 0 0 2px rgba(200,176,106,0.45), 0 1px 5px rgba(0,0,0,0.6);
+  cursor: move;
+}
 /* ---- map ---- */
 #map { position: absolute; inset: 0; background: var(--map-bg); }
 .leaflet-container { background: var(--map-bg); font: inherit; }

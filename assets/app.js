@@ -259,7 +259,7 @@
   }
   function loadVectors(id) {
     if (vecPromise[id]) return vecPromise[id];
-    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=32")
+    vecPromise[id] = fetch("vectors/" + id + ".bin.gz?v=33")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         // Pages may add its own content-encoding on top; if the
@@ -292,7 +292,7 @@
   var elevCache = {}, elevPromise = {};
   function loadElev(id) {
     if (elevPromise[id]) return elevPromise[id];
-    elevPromise[id] = fetch("elev/" + id + ".bin.gz?v=32")
+    elevPromise[id] = fetch("elev/" + id + ".bin.gz?v=33")
       .then(function (r) { return r.arrayBuffer(); })
       .then(function (buf) {
         var b = new Uint8Array(buf);
@@ -523,6 +523,8 @@
       vecCanvas.style.opacity = v;
     if (typeof labelCanvas !== "undefined" && labelCanvas)
       labelCanvas.style.opacity = v;
+    if (typeof vsOverlay !== "undefined" && vsOverlay._canvas)
+      vsOverlay._canvas.style.opacity = v;
   }
   map.on("zoomstart", function () { setLineOpacity("0"); });
   map.on("zoomend", function () {
@@ -1046,6 +1048,8 @@
       current = b.dataset.map;
       mA = mB = null;   // measure points belong to the old map
       drawMeasure();
+      vsObs = null; vsData = null;   // so does the viewshed pin
+      drawViewshed();
       // Recreate the layers instead of setUrl(): Leaflet 1.9's
       // setUrl -> redraw path stores the raw fractional map zoom as the
       // tile zoom, producing fractional tile URLs (…/2.5/…) that 404 and
@@ -1120,6 +1124,7 @@
     function (e) {
       measureOn = e.target.checked;
       if (!measureOn) { mA = mB = null; }
+      if (measureOn && vsOn) setViewshed(false);   // one click-tool at a time
       drawMeasure();
     });
   measureClearBtn.addEventListener("click", function () {
@@ -1141,6 +1146,244 @@
   });
   window.pubgtopoMeasure = function () {
     return { on: measureOn, a: mA, b: mB, text: measureResult.textContent };
+  };
+
+  /* ---------- viewshed / line of sight (Joel's pick, 2026-11-20)
+     Tick it on, click a spot: the overlay paints the ground that
+     spot can see (pale green) and the dead ground it can't (red),
+     computed from the same ELV1 elevation grid as the readout.
+     Radial sweep: along each of several thousand spokes from the
+     observer, a cell is visible if its slope from the eye beats
+     every slope in front of it along that spoke. Terrain only —
+     buildings, trees and rocks aren't in the data, so a view the
+     map calls clear can still be blocked by a house. The pin is
+     draggable; eye height and range live in the panel. Whole-map
+     range samples the grid nearest-cell and steps wider — at
+     kilometres of distance the difference is sub-cell, and it
+     keeps the sweep near a second instead of several. --------- */
+  map.createPane("viewshedPane");
+  map.getPane("viewshedPane").style.zIndex = 208;
+  var vsOn = false, vsObs = null, vsEye = 1.7, vsRange = 1000;
+  var vsData = null;   // {canvas, mx, my, mw, mh, vis, dead, ms, grid, n, ou, ov, R}
+  var vsPin = null;
+  var vsResult = document.getElementById("viewshed-result");
+  var vsClearBtn = document.getElementById("viewshed-clear");
+  var vsControls = document.getElementById("viewshed-controls");
+  var ViewshedOverlay = L.Layer.extend({
+    onAdd: function (map) {
+      this._canvas = L.DomUtil.create("canvas", "viewshed-canvas");
+      this._canvas.style.cssText =
+        "position:absolute;left:0;top:0;pointer-events:none;";
+      this._ctx = this._canvas.getContext("2d");
+      map.getPane("viewshedPane").appendChild(this._canvas);
+      map.on("moveend zoomend resize viewreset", this._reset, this);
+      this._reset();
+    },
+    onRemove: function (map) {
+      map.off("moveend zoomend resize viewreset", this._reset, this);
+      L.DomUtil.remove(this._canvas);
+      this._canvas = null;
+      this._ctx = null;
+    },
+    _reset: function () {
+      var map = this._map, c = this._canvas;
+      if (!map || !c) return;
+      var size = map.getSize();
+      var pad = 256;
+      var origin = map.containerPointToLayerPoint(L.point(-pad, -pad));
+      L.DomUtil.setPosition(c, origin);
+      var w = size.x + pad * 2, h = size.y + pad * 2;
+      if (c.width !== w) c.width = w;
+      if (c.height !== h) c.height = h;
+      var ctx = this._ctx;
+      ctx.clearRect(0, 0, w, h);
+      if (!vsData) return;
+      // Same anchoring as the line overlays: layer points are
+      // relative to the pixel origin, master coords sit at
+      // (layer point + pixel origin) / scale.
+      var scale = Math.pow(2, map.getZoom());
+      var pix = map.getPixelOrigin();
+      var gx = origin.x + pix.x, gy = origin.y + pix.y;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(vsData.canvas,
+        vsData.mx * scale - gx, vsData.my * scale - gy,
+        vsData.mw * scale, vsData.mh * scale);
+    }
+  });
+  var vsOverlay = new ViewshedOverlay();
+  function gridBilinear(z, n, u, v) {
+    var x0 = Math.min(Math.max(Math.floor(u), 0), n - 2);
+    var y0 = Math.min(Math.max(Math.floor(v), 0), n - 2);
+    var tx = Math.min(Math.max(u - x0, 0), 1);
+    var ty = Math.min(Math.max(v - y0, 0), 1);
+    var a = z[y0 * n + x0], b = z[y0 * n + x0 + 1];
+    var c = z[(y0 + 1) * n + x0], d = z[(y0 + 1) * n + x0 + 1];
+    return (a * (1 - tx) + b * tx) * (1 - ty) +
+           (c * (1 - tx) + d * tx) * ty;
+  }
+  function computeViewshed() {
+    if (!vsObs) { drawViewshed(); return; }
+    var e = elevCache[current];
+    if (!e) {
+      vsResult.textContent = "Loading elevation data…";
+      if (elevPromise[current])
+        elevPromise[current].then(function () {
+          if (vsOn && vsObs) computeViewshed();
+        });
+      return;
+    }
+    var t0 = performance.now();
+    var n = e.n, z = e.z, S = G / n;            // master px per cell
+    var CM = SPAN * 1000 / n;                   // metres per cell
+    var ou = vsObs.lng / S - 0.5, ov = -vsObs.lat / S - 0.5;
+    var ground = gridBilinear(z, n, ou, ov);
+    var eyeZ = ground + vsEye;
+    var R = vsRange === 0 ? 3000 : vsRange / CM;   // cells
+    var far = R > 900;
+    var sampleZ = far
+      ? function (x, y) { return z[Math.round(y) * n + Math.round(x)]; }
+      : function (x, y) { return gridBilinear(z, n, x, y); };
+    var spokes = Math.min(far ? 12000 : 16384,
+      Math.max(4096, Math.ceil(2 * Math.PI * R * 1.15)));
+    var step = far ? 0.7 : 0.45;
+    var vis = new Uint8Array(n * n);
+    for (var a = 0; a < spokes; a++) {
+      var th = a / spokes * Math.PI * 2;
+      var dx = Math.cos(th), dy = Math.sin(th);
+      var maxSlope = -Infinity;
+      for (var d = step; d <= R; d += step) {
+        var x = ou + dx * d, y = ov + dy * d;
+        if (x < 0 || y < 0 || x > n - 1 || y > n - 1) break;
+        var slope = (sampleZ(x, y) - eyeZ) / (d * CM);
+        if (slope > maxSlope) {
+          maxSlope = slope;
+          vis[Math.round(y) * n + Math.round(x)] = 1;
+        }
+      }
+    }
+    var ocx = Math.round(ou), ocy = Math.round(ov);
+    if (ocx >= 0 && ocy >= 0 && ocx < n && ocy < n) vis[ocy * n + ocx] = 1;
+    var x0 = Math.max(0, Math.floor(ou - R)),
+        x1 = Math.min(n - 1, Math.ceil(ou + R));
+    var y0 = Math.max(0, Math.floor(ov - R)),
+        y1 = Math.min(n - 1, Math.ceil(ov + R));
+    var w = x1 - x0 + 1, h = y1 - y0 + 1;
+    var cv = document.createElement("canvas");
+    cv.width = w; cv.height = h;
+    var c2 = cv.getContext("2d");
+    var img = c2.createImageData(w, h);
+    var px = img.data;
+    var visN = 0, deadN = 0, R2 = R * R;
+    for (var yy = y0; yy <= y1; yy++) {
+      for (var xx = x0; xx <= x1; xx++) {
+        var ddx = xx - ou, ddy = yy - ov;
+        if (ddx * ddx + ddy * ddy > R2) continue;
+        var o = ((yy - y0) * w + (xx - x0)) * 4;
+        if (vis[yy * n + xx]) {
+          px[o] = 140; px[o + 1] = 230; px[o + 2] = 140; px[o + 3] = 42;
+          visN++;
+        } else {
+          px[o] = 224; px[o + 1] = 52; px[o + 2] = 66; px[o + 3] = 88;
+          deadN++;
+        }
+      }
+    }
+    c2.putImageData(img, 0, 0);
+    vsData = { canvas: cv, mx: x0 * S, my: y0 * S, mw: w * S, mh: h * S,
+               vis: visN, dead: deadN,
+               ms: Math.round(performance.now() - t0),
+               grid: vis, n: n, ou: ou, ov: ov, R: R };
+    drawViewshed();
+    var tot = visN + deadN;
+    var pct = tot ? Math.round(visN / tot * 100) : 0;
+    vsResult.textContent = "Ground " + Math.round(ground) + " m · eye " +
+      vsEye + " m: " + pct + "% visible, " + (100 - pct) +
+      "% dead ground" + (vsRange === 0 ? ", whole map."
+        : ", within " + (vsRange >= 1000 ? vsRange / 1000 + " km"
+                                          : vsRange + " m") + ".");
+  }
+  function drawViewshed() {
+    var want = vsOn && !!vsObs && !!vsData;
+    var on = map.hasLayer(vsOverlay);
+    if (want && !on) vsOverlay.addTo(map);
+    else if (!want && on) map.removeLayer(vsOverlay);
+    else if (want && on) vsOverlay._reset();
+    if (vsPin) { map.removeLayer(vsPin); vsPin = null; }
+    if (vsOn && vsObs) {
+      vsPin = L.marker(vsObs, {
+        draggable: true, zIndexOffset: 1000,
+        icon: L.divIcon({ className: "vs-pin-wrap",
+          html: '<div class="vs-pin"></div>',
+          iconSize: [18, 18], iconAnchor: [9, 9] })
+      }).addTo(map);
+      vsPin.on("dragend", function () {
+        vsObs = vsPin.getLatLng();
+        computeViewshed();
+      });
+    }
+    vsResult.style.display = vsOn ? "" : "none";
+    vsControls.style.display = vsOn ? "" : "none";
+    if (vsOn && !vsObs)
+      vsResult.textContent = "Tick on, then click a spot on the map.";
+    vsClearBtn.style.display = vsObs ? "" : "none";
+  }
+  function setViewshed(on) {
+    vsOn = on;
+    document.getElementById("viewshed-toggle").checked = on;
+    if (!on) { vsObs = null; vsData = null; }
+    drawViewshed();
+  }
+  document.getElementById("viewshed-toggle").addEventListener("change",
+    function (e) {
+      if (e.target.checked && measureOn) {
+        measureOn = false; mA = mB = null;
+        document.getElementById("measure-toggle").checked = false;
+        drawMeasure();
+      }
+      setViewshed(e.target.checked);
+    });
+  document.getElementById("viewshed-eye").addEventListener("change",
+    function (e) {
+      vsEye = parseFloat(e.target.value);
+      if (vsObs) computeViewshed();
+    });
+  document.getElementById("viewshed-range").addEventListener("change",
+    function (e) {
+      vsRange = parseInt(e.target.value, 10);
+      if (vsObs) computeViewshed();
+    });
+  vsClearBtn.addEventListener("click", function () {
+    vsObs = null; vsData = null; drawViewshed();
+  });
+  map.on("click", function (e) {
+    if (!vsOn) return;
+    var oe = e.originalEvent;
+    if (downXY && oe && typeof oe.clientX === "number" &&
+        Math.hypot(oe.clientX - downXY[0], oe.clientY - downXY[1]) > 5)
+      return;   // that was a drag, not a click (same guard as measure)
+    vsObs = e.latlng;
+    computeViewshed();
+  });
+  window.pubgtopoViewshed = function () {
+    return {
+      on: vsOn,
+      obs: vsObs ? { lat: vsObs.lat, lng: vsObs.lng } : null,
+      eye: vsEye, range: vsRange,
+      vis: vsData ? vsData.vis : null,
+      dead: vsData ? vsData.dead : null,
+      ms: vsData ? vsData.ms : null,
+      visibleAt: function (lat, lng) {
+        if (!vsData) return null;
+        var S = G / vsData.n;
+        var cx = Math.round(lng / S - 0.5),
+            cy = Math.round(-lat / S - 0.5);
+        if (cx < 0 || cy < 0 || cx >= vsData.n || cy >= vsData.n)
+          return null;
+        var ddx = cx - vsData.ou, ddy = cy - vsData.ov;
+        if (ddx * ddx + ddy * ddy > vsData.R * vsData.R) return null;
+        return vsData.grid[cy * vsData.n + cx] === 1;
+      }
+    };
   };
 
   /* ---------- how-to-use overlay ----------
